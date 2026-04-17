@@ -31,7 +31,7 @@ from flask_bcrypt import Bcrypt
 
 app = Flask(__name__)
 app.config[
-    'SQLALCHEMY_DATABASE_URI'] = "postgresql://wingit01_render_example_user:Iz2kpcAfv7FBhMxF4pg4f0UqJAFDYRi7@dpg-d7h8ji8sfn5c73e9scl0-a.frankfurt-postgres.render.com/wingit01_render_example"
+    'SQLALCHEMY_DATABASE_URI'] = "postgresql://wingit02_render_example_user:SwAbqZPfuyZnbU7oW40S89nhBd1I181e@dpg-d7h9c7dckfvc73bonfb0-a.frankfurt-postgres.render.com/wingit02_render_example"
 socketio = SocketIO(app)
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)  # 2️⃣ migrate second, now db exists
@@ -97,7 +97,7 @@ class UserProfile(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
 
-    user = db.relationship('User', back_populates='profile') 
+    user = db.relationship('User', back_populates='profile', cascade='all, delete-orphan',lazy=True) 
 
 
 class UserPreferences(db.Model):
@@ -220,8 +220,8 @@ class Attendance(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.now(timezone.utc))
     hasAttended = db.Column(db.Boolean, default=False)
 
-    user = db.relationship('User', backref=db.backref('attendances', lazy=True, cascade='all, delete-orphan'))
-    location = db.relationship('EventLocation', backref=db.backref('attendances', lazy=True, cascade='all, delete-orphan'))
+    user = db.relationship('User', back_populates=db.backref('attendances', lazy=True, cascade='all, delete-orphan'))
+    location = db.relationship('EventLocation', back_populates=db.backref('attendances', lazy=True, cascade='all, delete-orphan'))
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'location_id', name='unique_user_location_attendance'),
@@ -236,8 +236,8 @@ class CheckIn(db.Model):
     location_id = db.Column(db.Integer, db.ForeignKey('event_locations.id', ondelete='CASCADE'), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.now(timezone.utc))
 
-    user = db.relationship('User', backref=db.backref('user_checkins', lazy=True, cascade='all, delete-orphan'))
-    location = db.relationship('EventLocation', backref=db.backref('user_checkins', lazy=True, cascade='all, delete-orphan'))
+    user = db.relationship('User', back_populates=db.backref('user_checkins', lazy=True, cascade='all, delete-orphan'))
+    location = db.relationship('EventLocation', back_populates=db.backref('user_checkins', lazy=True, cascade='all, delete-orphan'))
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'location_id', name='unique_user_location_checkin'),
@@ -254,9 +254,9 @@ class MatchDecision(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.now(timezone.utc))
 
     # Relationships
-    user = db.relationship('User', foreign_keys=[user_id], backref=db.backref('user_match_preference', lazy=True, cascade='all, delete-orphan'))
-    preferred_user = db.relationship('User', foreign_keys=[preferred_user_id], backref=db.backref('preferred_by', lazy=True, cascade='all, delete-orphan'))
-    match = db.relationship('Match', backref=db.backref('user_match_preference', lazy=True, cascade='all, delete-orphan'))
+    user = db.relationship('User', foreign_keys=[user_id], back_populates='user_match_preference')
+    preferred_user = db.relationship('User', foreign_keys=[preferred_user_id], back_populates='preferred_by')
+    match = db.relationship('Match', back_populates='user_match_preference')
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'preferred_user_id', 'match_id', name='unique_user_match_preference'),
@@ -277,9 +277,9 @@ class Match(db.Model):
     round_number = db.Column(db.Integer, default=1)  # 🆕 round-robin tracking
 
     # Relationships
-    user1 = db.relationship('User', foreign_keys=[user1_id], backref=db.backref('matches_as_user1', lazy=True))
-    user2 = db.relationship('User', foreign_keys=[user2_id], backref=db.backref('matches_as_user2', lazy=True))
-    location = db.relationship('EventLocation', backref=db.backref('matches_at_location', lazy=True))
+    user1 = db.relationship('User', foreign_keys=[user1_id], back_populates='matches_as_user1')
+    user2 = db.relationship('User', foreign_keys=[user2_id], back_populates='matches_as_user2')
+    location = db.relationship('EventLocation', back_populates='matches_at_location')
 
 
 class ChatMessage(db.Model):
@@ -292,9 +292,9 @@ class ChatMessage(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     image_url = db.Column(db.String())
 
-    sender = db.relationship('Task', foreign_keys=[sender_id], backref=db.backref('sent_messages', lazy=True))
-    receiver = db.relationship('Task', foreign_keys=[receiver_id], backref=db.backref('received_messages', lazy=True))
-    reply_to = db.relationship('Message', remote_side=[id], backref=db.backref('replies', lazy=True))
+    sender = db.relationship('User', foreign_keys=[sender_id], back_populates='sent_messages')
+    receiver = db.relationship('User', foreign_keys=[receiver_id], back_populates='received_messages')
+    reply_to = db.relationship('ChatMessage', remote_side=[id], back_populates=db.backref('replies', lazy=True))
 
 
 group_members = db.Table(
@@ -325,9 +325,9 @@ class Groups(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    creator = db.relationship('User', backref='created_groups')
-    members = db.relationship('User', secondary=group_members, backref='groups')
-    posts = db.relationship('Post', backref='group', lazy=True)
+    creator = db.relationship('User', back_populates='created_groups')
+    members = db.relationship('User', secondary=group_members, back_populates='groups')
+    posts = db.relationship('Post', back_populates='group', lazy=True)
 
     @property
     def members_count(self):
