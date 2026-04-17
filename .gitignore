@@ -1,0 +1,21 @@
+# Virtual environments
+venv/
+.env/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# IDEs
+.idea/
+.vscode/
+
+# Flask / Python
+instance/
+migrations/
+
+# OS files
+.DS_Store
