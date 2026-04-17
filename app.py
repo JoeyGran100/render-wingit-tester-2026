@@ -80,7 +80,7 @@ class User(db.Model):
     
     profile = db.relationship('UserProfile',back_populates='user',uselist=False,cascade='all, delete-orphan')
     preferences = db.relationship('UserPreferences',back_populates='user',uselist=False,cascade='all, delete-orphan')
-    images = db.relationship('UserImage',back_populates='user',cascade='all, delete-orphan',lazy=True)
+    images = db.relationship('UserImages',back_populates='user',cascade='all, delete-orphan',lazy=True)
 
 
 class UserProfile(db.Model):
