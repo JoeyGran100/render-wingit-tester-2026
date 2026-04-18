@@ -1595,13 +1595,13 @@ def get_user_tickets():
             'event_host': location.event_host.name if location.event_host else None,
             'event_host_id': location.event_host_id,
             'description': location.description,
-+           'is_matchmaking_enabled': location.is_matchmaking_enabled,
-+           'start_time': location.start_time.isoformat(),
-+           'location_name': location.location_name,
+            'is_matchmaking_enabled': location.is_matchmaking_enabled,
+            'start_time': location.start_time.isoformat(),
+            'location_name': location.location_name,
             'checked_in': checked_in,
-+           'male_attendees': location._count_by_gender(GenderEnum.male),
-+           'female_attendees': location._count_by_gender(GenderEnum.female),
-+           'max_attendees': location.max_attendees
+            'male_attendees': location._count_by_gender(GenderEnum.male),
+            'female_attendees': location._count_by_gender(GenderEnum.female),
+            'max_attendees': location.max_attendees
         })
 
     return jsonify({'tickets': tickets}), 200
@@ -1671,7 +1671,7 @@ def get_attendance():
         attendee_list.append({
             'user_id': attendee_user.id,
             'email': attendee_user.email,
-            'gender': profile.gender if profile else None,
+            'gender': profile.gender.value if profile and profile.gender else None,
             'attending_at': attendance.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
             'checked_in': checked_in,
             'hasAttended': attendance.hasAttended
