@@ -31,7 +31,7 @@ from flask_bcrypt import Bcrypt
 
 app = Flask(__name__)
 app.config[
-    'SQLALCHEMY_DATABASE_URI'] = "postgresql://wingit03_render_example_user:pNV8LYURsCfoPWlLRX9O8QQdCEsgPYa2@dpg-d7hkv59j2pic73aas9kg-a.frankfurt-postgres.render.com/wingit03_render_example"
+    'SQLALCHEMY_DATABASE_URI'] = "postgresql://wingit04_render_example_user:1HPP58jO8WrT9MjMI4tt3g46xUxWkTef@dpg-d7hl3667r5hc73buggug-a.frankfurt-postgres.render.com/wingit04_render_example"
 socketio = SocketIO(app)
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)  # 2️⃣ migrate second, now db exists
@@ -74,10 +74,13 @@ class User(db.Model):
     __tablename__ = 'user_credentials'
 
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(200),unique=True,nullable=False,index=True)
+    email = db.Column(db.String(200), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime,default=datetime.utcnow,nullable=False)
-    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    profile = db.relationship('UserProfile', back_populates='user', uselist=False, cascade='all, delete-orphan')
+    preferences = db.relationship('UserPreferences', back_populates='user', uselist=False, cascade='all, delete-orphan')
+    images = db.relationship('UserImages', back_populates='user', cascade='all, delete-orphan', lazy=True)
     attendances = db.relationship('Attendance', back_populates='user', lazy=True, cascade='all, delete-orphan')
     checkins = db.relationship('CheckIn', back_populates='user', lazy=True, cascade='all, delete-orphan')
     sent_messages = db.relationship('ChatMessage', foreign_keys='ChatMessage.sender_id', back_populates='sender')
