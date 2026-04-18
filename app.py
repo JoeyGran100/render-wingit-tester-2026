@@ -31,7 +31,7 @@ from flask_bcrypt import Bcrypt
 
 app = Flask(__name__)
 app.config[
-    'SQLALCHEMY_DATABASE_URI'] = "postgresql://wingit02_render_example_user:SwAbqZPfuyZnbU7oW40S89nhBd1I181e@dpg-d7h9c7dckfvc73bonfb0-a.frankfurt-postgres.render.com/wingit02_render_example"
+    'SQLALCHEMY_DATABASE_URI'] = "postgresql://wingit03_render_example_user:pNV8LYURsCfoPWlLRX9O8QQdCEsgPYa2@dpg-d7hkv59j2pic73aas9kg-a.frankfurt-postgres.render.com/wingit03_render_example"
 socketio = SocketIO(app)
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)  # 2️⃣ migrate second, now db exists
