@@ -78,9 +78,16 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime,default=datetime.utcnow,nullable=False)
     
-    profile = db.relationship('UserProfile',back_populates='user',uselist=False,cascade='all, delete-orphan')
-    preferences = db.relationship('UserPreferences',back_populates='user',uselist=False,cascade='all, delete-orphan')
-    images = db.relationship('UserImages',back_populates='user',cascade='all, delete-orphan',lazy=True)
+    attendances = db.relationship('Attendance', back_populates='user', lazy=True, cascade='all, delete-orphan')
+    checkins = db.relationship('CheckIn', back_populates='user', lazy=True, cascade='all, delete-orphan')
+    sent_messages = db.relationship('ChatMessage', foreign_keys='ChatMessage.sender_id', back_populates='sender')
+    received_messages = db.relationship('ChatMessage', foreign_keys='ChatMessage.receiver_id', back_populates='receiver')
+    matches_as_user1 = db.relationship('Match', foreign_keys='Match.user1_id', back_populates='user1')
+    matches_as_user2 = db.relationship('Match', foreign_keys='Match.user2_id', back_populates='user2')
+    user_match_preference = db.relationship('MatchDecision', foreign_keys='MatchDecision.user_id', back_populates='user')
+    preferred_by = db.relationship('MatchDecision', foreign_keys='MatchDecision.preferred_user_id', back_populates='preferred_user')
+    created_groups = db.relationship('Groups', back_populates='creator')
+    group_memberships = db.relationship('GroupMember', back_populates='user', cascade='all, delete-orphan')
 
 
 class UserProfile(db.Model):
@@ -97,8 +104,7 @@ class UserProfile(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
 
-    user = db.relationship('User', back_populates='profile', cascade='all, delete-orphan',lazy=True) 
-
+    user = db.relationship('User', back_populates='profile', lazy=True)
 
 class UserPreferences(db.Model):
     __tablename__ = "user_preferences" # snake_case is better
@@ -170,6 +176,10 @@ class EventLocation(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
+    
+    attendances = db.relationship('Attendance', back_populates='location', lazy=True, cascade='all, delete-orphan')
+    checkins = db.relationship('CheckIn', back_populates='location', lazy=True, cascade='all, delete-orphan')
+    matches_at_location = db.relationship('Match', back_populates='location')
 
     @validates('max_male_attendees', 'max_female_attendees')
     def validate_gender_limits(self, key, value):
@@ -220,8 +230,8 @@ class Attendance(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.now(timezone.utc))
     hasAttended = db.Column(db.Boolean, default=False)
 
-    user = db.relationship('User', back_populates=db.backref('attendances', lazy=True, cascade='all, delete-orphan'))
-    location = db.relationship('EventLocation', back_populates=db.backref('attendances', lazy=True, cascade='all, delete-orphan'))
+    user = db.relationship('User', back_populates='attendances')
+    location = db.relationship('EventLocation', back_populates='attendances')
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'location_id', name='unique_user_location_attendance'),
@@ -236,8 +246,8 @@ class CheckIn(db.Model):
     location_id = db.Column(db.Integer, db.ForeignKey('event_locations.id', ondelete='CASCADE'), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.now(timezone.utc))
 
-    user = db.relationship('User', back_populates=db.backref('user_checkins', lazy=True, cascade='all, delete-orphan'))
-    location = db.relationship('EventLocation', back_populates=db.backref('user_checkins', lazy=True, cascade='all, delete-orphan'))
+    user = db.relationship('User', back_populates='checkins')
+    location = db.relationship('EventLocation', back_populates='checkins')
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'location_id', name='unique_user_location_checkin'),
@@ -294,14 +304,21 @@ class ChatMessage(db.Model):
 
     sender = db.relationship('User', foreign_keys=[sender_id], back_populates='sent_messages')
     receiver = db.relationship('User', foreign_keys=[receiver_id], back_populates='received_messages')
-    reply_to = db.relationship('ChatMessage', remote_side=[id], back_populates=db.backref('replies', lazy=True))
+    reply_to = db.relationship('ChatMessage', remote_side=[id], back_populates='replies')
+    replies = db.relationship('ChatMessage', back_populates='reply_to')
 
 
-group_members = db.Table(
-    'group_members',
-    db.Column('group_id', db.Integer, db.ForeignKey('groups.id'), primary_key=True),
-    db.Column('user_id', db.Integer, db.ForeignKey('user_credentials.id'), primary_key=True)
-)
+
+class GroupMember(db.Model):
+    __tablename__ = 'group_members'
+
+    group_id = db.Column(db.Integer, db.ForeignKey('groups.id', ondelete='CASCADE'), primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user_credentials.id', ondelete='CASCADE'), primary_key=True)
+    role = db.Column(db.String(20), default='member')  # 'member', 'admin'
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    group = db.relationship('Groups', back_populates='memberships')
+    user = db.relationship('User', back_populates='group_memberships')
 
 
 class Groups(db.Model):
@@ -311,27 +328,21 @@ class Groups(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     description = db.Column(db.Text)
     image_url = db.Column(db.String(255))
-    gender_restriction = db.Column(
-        db.Enum(GenderEnum),
-        default=GenderEnum.male,
-        nullable=False
-    )
-
-    creator_id = db.Column(
-        db.Integer,
-        db.ForeignKey('user_credentials.id'),
-        nullable=False
-    )
-
+    gender_restriction = db.Column(db.Enum(GenderEnum), default=GenderEnum.male, nullable=False)
+    creator_id = db.Column(db.Integer, db.ForeignKey('user_credentials.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     creator = db.relationship('User', back_populates='created_groups')
-    members = db.relationship('User', secondary=group_members, back_populates='groups')
+    memberships = db.relationship('GroupMember', back_populates='group', cascade='all, delete-orphan')
     posts = db.relationship('Post', back_populates='group', lazy=True)
 
     @property
+    def members(self):
+        return [m.user for m in self.memberships]
+
+    @property
     def members_count(self):
-        return db.session.query(group_members).filter_by(group_id=self.id).count()
+        return GroupMember.query.filter_by(group_id=self.id).count()
 
     def to_dict(self):
         return {
@@ -340,9 +351,10 @@ class Groups(db.Model):
             "description": self.description,
             "image_url": self.image_url,
             "members_count": self.members_count,
-            "gender_restriction": self.gender_restriction.value,  # return "male"/"female" not the enum object
+            "gender_restriction": self.gender_restriction.value,
             "created_at": self.created_at.isoformat(),
         }
+
 
 
 with app.app_context():
