@@ -2011,18 +2011,18 @@ def get_all_groups():
         for group in groups:
 
             results.append({
-                "id": group.id,
-                "name": group.name,
-                "description": group.description,
-                "image_url": group.image_url,
-                "creator": {
-                    "id": group.creator.id,
-                    "email": group.creator.email
-                },
-                "members_count": group.members_count,
-                "is_member": user_id in [u.id for u in group.members],
-                "gender_restriction": group.gender_restriction,
-                "created_at": group.created_at.isoformat()
+                    "id": group.id,
+                    "name": group.name,
+                    "description": group.description,
+                    "image_url": group.image_url,
+                    "creator": {
+                        "id": group.creator.id,
+                        "email": group.creator.email
+                    } if group.creator else None,  # ✅ handle deleted creator
+                    "members_count": group.members_count,
+                    "is_member": user_id in [u.id for u in group.members],
+                    "gender_restriction": group.gender_restriction.value if group.gender_restriction else None,  # ✅ serialize enum
+                    "created_at": group.created_at.isoformat()
             })
 
         return jsonify(results), 200
