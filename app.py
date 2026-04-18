@@ -73,6 +73,10 @@ class GenderEnum(enum.Enum):
     male = "Male"
     female = "Female"
 
+class GenderRestriction(enum.Enum):
+    all = "all"
+    male_only = "Male-only"   # check exact casing/value here
+    female_only = "Female-only"
 
 class User(db.Model):
     __tablename__ = 'user_credentials'
