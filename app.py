@@ -1835,10 +1835,16 @@ def create_group():
 
     name = data.get("name")
     description = data.get("description")
-    gender_restriction = data.get("gender_restriction", "all")
+    gender_restriction_str = data.get("gender_restriction", "Everyone")
 
     if not name:
         return jsonify({"error": "Group name is required"}), 400
+
+    # Validate and convert to GenderRestriction enum
+    valid_values = {r.value: r for r in GenderRestriction}
+    if gender_restriction_str not in valid_values:
+        return jsonify({"error": f"gender_restriction must be one of {list(valid_values.keys())}"}), 400
+    gender_restriction = valid_values[gender_restriction_str]
 
     if Groups.query.filter_by(name=name).first():
         return jsonify({"error": "Group name already exists"}), 409
@@ -1865,7 +1871,7 @@ def create_group():
                 "description": group.description,
                 "image_url": group.image_url,
                 "creator_id": group.creator_id,
-                "gender_restriction": group.gender_restriction,
+                "gender_restriction": group.gender_restriction.value,  # ✅ serialize to string
                 "members_count": group.members_count,
                 "created_at": group.created_at.isoformat()
             }
@@ -1875,7 +1881,7 @@ def create_group():
         db.session.rollback()
         import traceback
         print(traceback.format_exc())
-        return jsonify({"error": "Failed to create group"}), 500    
+        return jsonify({"error": "Failed to create group"}), 500 
 
 
 @app.route('/upload_group_image', methods=['POST'])
