@@ -74,7 +74,7 @@ class GenderEnum(enum.Enum):
     female = "Female"
 
 class GenderRestriction(enum.Enum):
-    all = "all"
+    everyone = "Everyone"  # check exact casing/value here
     male_only = "Male-only"   # check exact casing/value here
     female_only = "Female-only"
 
