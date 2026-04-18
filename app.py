@@ -1423,7 +1423,7 @@ def get_my_image():
         return jsonify({"error": "No image found for this user"}), 404
 
 
-@app.route('/locationInfo', methods=['POST'])
+@app.route('/eventLocationInfo', methods=['POST'])
 def postLocationInfo():
     try:
         # ===== AUTH =====
@@ -1513,7 +1513,7 @@ def postLocationInfo():
         return jsonify({"error": "Internal server error"}), 500
 
 
-@app.route('/locationInfo', methods=['GET'])
+@app.route('/eventLocationInfo', methods=['GET'])
 def getLocationInfo():
     user = get_current_user_from_token()
     if not user:
