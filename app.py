@@ -1783,11 +1783,10 @@ def check_checkin():
     if checkin:
         location = checkin.location
         checkin_count = CheckIn.query.filter_by(location_id=location_id).count()
-        max_attendees = location.maxAttendees
 
         return jsonify({
             'checked_in': True,
-            'timestamp': checkin.timestamp,
+            'timestamp': checkin.timestamp.isoformat(),  # add .isoformat()
             'checkin_status': f"{checkin_count}/{location.max_attendees} checked in",
             'location': {
                 'id': location.id,
@@ -1795,9 +1794,11 @@ def check_checkin():
                 'start_time': location.start_time.isoformat(),
                 'latitude': location.latitude,
                 'longitude': location.longitude,
-                'max_attendees': location.max_attendees,
+                'max_attendees': location.max_attendees,        # ✅ add this back
                 'male_attendees': location._count_by_gender(GenderEnum.male),
                 'female_attendees': location._count_by_gender(GenderEnum.female),
+                'max_male_attendees': location.max_male_attendees,
+                'max_female_attendees': location.max_female_attendees,
                 'total_price': float(location.total_price) if location.total_price else None,
                 'currency': location.currency
             }
