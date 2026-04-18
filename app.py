@@ -2278,7 +2278,7 @@ def get_user_matches():
                 continue
 
             # Fetch all related tables
-            other_user_preferences = MatchDecision.query.filter_by(user_profile_id=other_user_data.id).first()
+            other_user_preferences = UserPreferences.query.filter_by(user_auth_id=other_user_id).first()
 
             user_pref = MatchDecision.query.filter_by(
                 user_id=user.id, preferred_user_id=other_user_id
