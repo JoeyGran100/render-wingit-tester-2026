@@ -1294,6 +1294,7 @@ def getUserProfileData():
                 'phone_number': profile.phone_number,
                 'bio': profile.bio,                             
                 'looking_for': auth_user.preferences.looking_for if auth_user.preferences else None,
+                'open_for': auth_user.preferences.open_for if auth_user.preferences else None,
                 'image_url': user_image.image_url if user_image else None,  
                 'current_server_time': get_unix_timestamp(datetime.now(timezone.utc)),
             }
