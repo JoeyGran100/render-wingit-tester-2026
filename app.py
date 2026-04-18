@@ -2278,13 +2278,13 @@ def get_user_matches():
                 continue
 
             # Fetch all related tables
-            other_user_preferences = UserPreferences.query.filter_by(user_profile_id=other_user_data.id).first()
+            other_user_preferences = MatchDecision.query.filter_by(user_profile_id=other_user_data.id).first()
 
-            user_pref = UserPreferences.query.filter_by(
+            user_pref = MatchDecision.query.filter_by(
                 user_id=user.id, preferred_user_id=other_user_id
             ).first()
 
-            other_pref = UserPreferences.query.filter_by(
+            other_pref = MatchDecision.query.filter_by(
                 user_id=other_user_id, preferred_user_id=user.id
             ).first()
 
