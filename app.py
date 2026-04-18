@@ -2214,8 +2214,7 @@ def set_preference():
         if not match:
             return jsonify({'error': 'Match not found'}), 404
 
-        # ✅ No profile lookup needed — UserPreference FKs point directly to userdetails.id
-        existing_pref = UserPreferences.query.filter_by(
+        existing_pref = MatchDecision.query.filter_by(
             user_id=auth_user.id,
             preferred_user_id=preferred_user_auth_id,
             match_id=match_id
@@ -2227,7 +2226,7 @@ def set_preference():
             existing_pref.preference = preference
             existing_pref.timestamp = datetime.now(timezone.utc)
         else:
-            db.session.add(UserPreferences(
+            db.session.add(MatchDecision(
                 user_id=auth_user.id,
                 preferred_user_id=preferred_user_auth_id,
                 match_id=match_id,
