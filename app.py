@@ -323,7 +323,6 @@ class Groups(db.Model):
 
     creator = db.relationship('User', back_populates='created_groups')
     memberships = db.relationship('GroupMember', back_populates='group', cascade='all, delete-orphan')
-    posts = db.relationship('Post', back_populates='group', lazy=True)
 
     @property
     def members(self):
@@ -1339,7 +1338,7 @@ def upload_image():
 
         filename = secure_filename(file.filename)
         
-        # ✅ CRITICAL: Use user_id for folder organization, similar to socialmediaposts
+        # ✅ CRITICAL: Use user_id for folder organization
         object_key = f"user_uploads/{user_id}/{uuid4()}_{filename}"
 
         try:
@@ -2002,7 +2001,6 @@ def get_all_groups():
         results = []
 
         for group in groups:
-            top_post = max(group.posts, key=lambda p: len(p.likes)) if group.posts else None
 
             results.append({
                 "id": group.id,
@@ -2016,22 +2014,6 @@ def get_all_groups():
                 "members_count": group.members_count,
                 "is_member": user_id in [u.id for u in group.members],
                 "gender_restriction": group.gender_restriction,
-                "top_post": {
-                    "id": top_post.id,
-                    "text": top_post.text,
-                    "post_type": top_post.post_type,
-                    "media_url": top_post.media_url,
-                    "created_at": top_post.created_at.isoformat(),
-                    "is_deleted": top_post.is_deleted,
-                    "group_id": top_post.group_id,
-                    "likes_count": len(top_post.likes),
-                    "comments_count": len(top_post.comments),
-                    "hashtags": [h.name for h in top_post.hashtags],
-                    "author": {
-                        "id": top_post.author.id,
-                        "email": top_post.author.email,
-                    }
-                } if top_post else None,
                 "created_at": group.created_at.isoformat()
             })
 
