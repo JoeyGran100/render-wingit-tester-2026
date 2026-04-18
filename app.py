@@ -41,6 +41,10 @@ bcrypt = Bcrypt()
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['SECRET_KEY'] = 'a8f4c2e1b5d6f7a8c9e0d1f2b3a4c5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2'
 SECRET_KEY = app.config['SECRET_KEY']
+# ✅ NEW: Configuration constants
+MAX_FILE_SIZE = 50 * 1024 * 1024        # 50MB
+MAX_IMAGE_WIDTH = 4000
+MAX_IMAGE_HEIGHT = 4000
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -353,12 +357,6 @@ with app.app_context():
     db.create_all()
 
 # Define functions
-
-# ✅ NEW: Configuration constants
-MAX_FILE_SIZE = 50 * 1024 * 1024        # 50MB
-MAX_IMAGE_WIDTH = 4000
-MAX_IMAGE_HEIGHT = 4000
-SECRET_KEY = os.environ.get('SECRET_KEY')
 
 def create_token(user):
     payload = {
