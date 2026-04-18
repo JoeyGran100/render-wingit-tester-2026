@@ -1061,7 +1061,7 @@ def postData():
 
         # Hash password before storing ✅
         hashed_password = bcrypt.generate_password_hash(new_password).decode('utf-8')
-        new_user = User(email=new_email, password=hashed_password)
+        new_user = User(email=new_email, password_hash=hashed_password)
         db.session.add(new_user)
         db.session.commit()
 
