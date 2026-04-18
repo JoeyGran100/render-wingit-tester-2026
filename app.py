@@ -325,7 +325,7 @@ class Groups(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     description = db.Column(db.Text)
     image_url = db.Column(db.String(255))
-    gender_restriction = db.Column(db.Enum(GenderEnum), default=GenderEnum.male, nullable=False)
+    gender_restriction = db.Column(db.Enum(GenderRestriction), default=GenderRestriction.everyone, nullable=False)
     creator_id = db.Column(db.Integer, db.ForeignKey('user_credentials.id', ondelete='SET NULL'), nullable=True)  # ✅ SET NULL so group survives if creator deleted
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
