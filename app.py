@@ -2373,7 +2373,7 @@ def update_match_status():
         other_user_id = match.user2_id if match.user1_id == user.id else match.user1_id
         location_id = match.location_id
 
-        pref = UserPreferences.query.filter_by(
+        pref = MatchDecision.query.filter_by(
             user_id=user.id,
             preferred_user_id=other_user_id,
             match_id=match_id
@@ -2387,7 +2387,7 @@ def update_match_status():
             pref.preference = new_preference
             pref.timestamp = datetime.now(timezone.utc)
         else:
-            pref = UserPreferences(
+            pref = MatchDecision(
                 user_id=user.id,
                 preferred_user_id=other_user_id,
                 match_id=match_id,
