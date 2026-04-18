@@ -1275,8 +1275,6 @@ def getUserProfileData():
     current_user = get_current_user_from_token()
     if not current_user:
         return jsonify({'error': 'Unauthorized'}), 401
-    if not current_user.is_admin:
-        return jsonify({'error': 'Forbidden: Admins only'}), 403
 
     try:
         profiles = UserProfile.query.all()
