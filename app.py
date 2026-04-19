@@ -31,7 +31,7 @@ from flask_bcrypt import Bcrypt
 
 app = Flask(__name__)
 app.config[
-    'SQLALCHEMY_DATABASE_URI'] = "postgresql://wingit06_render_example_user:rLG7cWFSshdcxYoWMiYiHhaGapGLZ9Nv@dpg-d7hlf7pf9bms73fmiing-a.frankfurt-postgres.render.com/wingit06_render_example"
+    'SQLALCHEMY_DATABASE_URI'] = "postgresql://wingit07_render_example_user:DRZdecsGNvthEU5aDgPrqWLXxFJ18TZU@dpg-d7igcnl8nd3s73dmmg2g-a.frankfurt-postgres.render.com/wingit07_render_example"
 socketio = SocketIO(app)
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)  # 2️⃣ migrate second, now db exists
@@ -109,7 +109,7 @@ class UserProfile(db.Model):
     gender = db.Column(db.Enum(GenderEnum))
     first_name = db.Column(db.String(100))
     last_name = db.Column(db.String(100))
-    date_of_birth = db.Column(db.Date)
+    age = db.Column(db.String(10))
     phone_number = db.Column(db.String(20))
     bio = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -1130,7 +1130,7 @@ def logged_in_user_profile():
             "first_name": profile.first_name,       
             "last_name": profile.last_name,          
             "gender": profile.gender.value if profile.gender else None,  
-            "date_of_birth": profile.date_of_birth.isoformat() if profile.date_of_birth else None,  # ✅ was age — now date_of_birth
+            "age": profile.age if profile.age else None,
             "phone_number": profile.phone_number,
             "bio": profile.bio,                      
         },
@@ -1176,8 +1176,8 @@ def update_user_profile():
         profile.last_name = data["last_name"]            
     if "phone_number" in data:
         profile.phone_number = data["phone_number"]
-    if "date_of_birth" in data:
-        profile.date_of_birth = data["date_of_birth"]     
+    if "age" in data:
+        profile.age = data["age"]
     if "gender" in data:
         profile.gender = data["gender"]
     if "bio" in data:
@@ -1240,8 +1240,8 @@ def postUserProfileData():
         profile.last_name = data.get('last_name')      
     if 'gender' in data:
         profile.gender = data.get('gender')
-    if 'date_of_birth' in data:
-        profile.date_of_birth = data.get('date_of_birth') # was age
+    if 'age' in data:
+        profile.age = data.get('age')
     if 'phone_number' in data:
         profile.phone_number = data.get('phone_number')
     if 'bio' in data:
@@ -1294,7 +1294,7 @@ def getUserProfileData():
                 'last_name': profile.last_name,                 
                 'gender': profile.gender.value if profile.gender else None,  
                 'email': auth_user.email,                       
-                'date_of_birth': profile.date_of_birth.isoformat() if profile.date_of_birth else None,  # ✅ was age
+                'age': profile.age if profile.age else None,
                 'phone_number': profile.phone_number,
                 'bio': profile.bio,                             
                 'looking_for': auth_user.preferences.looking_for if auth_user.preferences else None,
@@ -2163,7 +2163,7 @@ def get_user_matches_for_location(location_id):
                 'email': other_user_data.email,
                 'first_name': other_user_data.first_name,
                 'last_name': other_user_data.last_name,
-                'date_of_birth': other_user_data.date_of_birth,
+                'age': other_user_data.age,
                 'bio': other_user_data.bio if other_user_data else None,
                 'gender': other_user_data.gender,
                 'phone_number': other_user_data.phone_number,
@@ -2325,7 +2325,7 @@ def get_user_matches():
                 'first_name': other_user_data.first_name,
                 'last_name': other_user_data.last_name,
                 'email': other_user.email,
-                'date_of_birth': other_user_data.date_of_birth,
+                'age': other_user_data.age,
                 'gender': other_user_data.gender,
                 'phone_number': other_user_data.phone_number,
                 
