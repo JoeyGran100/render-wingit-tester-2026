@@ -1216,7 +1216,6 @@ def update_user_profile():
     return jsonify({"message": "Profile updated successfully"}), 200
 
 
-# POST USER PROFILE INFO
 @app.route('/userProfile', methods=['POST'])
 def postUserProfileData():
     user = get_current_user_from_token()
@@ -1227,21 +1226,26 @@ def postUserProfileData():
     if not data:
         return jsonify({'error': 'No data provided'}), 400
 
-    # ✅ Use relationship instead of querying manually
     profile = user.profile
     if not profile:
         profile = UserProfile(user_auth_id=user.id)
         db.session.add(profile)
 
-    # ✅ Match UserProfile column names exactly
     if 'first_name' in data:
-        profile.first_name = data.get('first_name')     
+        profile.first_name = data.get('first_name')
     if 'last_name' in data:
-        profile.last_name = data.get('last_name')      
+        profile.last_name = data.get('last_name')
     if 'gender' in data:
-        profile.gender = data.get('gender')
+        gender_map = {"male": GenderEnum.male, "female": GenderEnum.female}
+        val = data.get('gender', '').lower()
+        if val not in gender_map:
+            return jsonify({'error': f'Invalid gender: {val}'}), 400
+        profile.gender = gender_map[val]
     if 'age' in data:
-        profile.age = data.get('age')
+        try:
+            profile.age = int(data.get('age'))
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid age value'}), 400
     if 'phone_number' in data:
         profile.phone_number = data.get('phone_number')
     if 'bio' in data:
@@ -1255,7 +1259,7 @@ def postUserProfileData():
             db.session.add(preferences)
 
         if 'looking_for' in data:
-            preferences.looking_for = data.get('looking_for')   
+            preferences.looking_for = data.get('looking_for')
         if 'open_for' in data:
             preferences.open_for = data.get('open_for')
         if 'hobbies' in data:
