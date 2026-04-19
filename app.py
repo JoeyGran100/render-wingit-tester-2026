@@ -1234,30 +1234,30 @@ def postUserProfileData():
         db.session.add(profile)
 
     # ✅ Match UserProfile column names exactly
-    if 'firstName' in data:
-        profile.first_name = data.get('firstName')     
-    if 'lastName' in data:
-        profile.last_name = data.get('lastName')      
+    if 'first_name' in data:
+        profile.first_name = data.get('first_name')     
+    if 'last_name' in data:
+        profile.last_name = data.get('last_name')      
     if 'gender' in data:
         profile.gender = data.get('gender')
-    if 'dateOfBirth' in data:
-        profile.date_of_birth = data.get('dateOfBirth') # was age
-    if 'phoneNumber' in data:
-        profile.phone_number = data.get('phoneNumber')
+    if 'date_of_birth' in data:
+        profile.date_of_birth = data.get('date_of_birth') # was age
+    if 'phone_number' in data:
+        profile.phone_number = data.get('phone_number')
     if 'bio' in data:
         profile.bio = data.get('bio')
 
-    preference_keys = ['lookingFor', 'openFor', 'hobbies', 'preferences']
+    preference_keys = ['looking_for', 'open_for', 'hobbies', 'preferences']
     if any(k in data for k in preference_keys):
         preferences = user.preferences
         if not preferences:
             preferences = UserPreferences(user_auth_id=user.id)
             db.session.add(preferences)
 
-        if 'lookingFor' in data:
-            preferences.looking_for = data.get('lookingFor')   
-        if 'openFor' in data:
-            preferences.open_for = data.get('openFor')
+        if 'looking_for' in data:
+            preferences.looking_for = data.get('looking_for')   
+        if 'open_for' in data:
+            preferences.open_for = data.get('open_for')
         if 'hobbies' in data:
             preferences.hobbies = data.get('hobbies')
         if 'preferences' in data:
