@@ -1,5 +1,6 @@
 
 from datetime import datetime, time, timezone
+import profile
 import re, os
 from email.policy import default
 from flask import Flask, jsonify, request, session, send_from_directory
@@ -1634,6 +1635,7 @@ def attend_location():
 
     location = EventLocation.query.get(location_id)
     profile = UserProfile.query.filter_by(user_auth_id=user_id).first()
+    print(f"Profile found: {profile}, Gender: {profile.gender if profile else 'NO PROFILE'}")
 
     if not location:
         return jsonify({'message': 'Invalid location'}), 404 
