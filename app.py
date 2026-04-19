@@ -1042,7 +1042,7 @@ def delete_user(user_id):
 
 
 # POST USER CREDENTIALS TO DATABASE
-@app.route('/users', methods=['POST'])
+@app.route('/userCredentials', methods=['POST'])
 def postData():
     try:
         data = request.get_json()
