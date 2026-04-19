@@ -1170,14 +1170,14 @@ def update_user_profile():
         return jsonify({"error": "No data provided"}), 400
 
     # ✅ Update profile fields — matched to UserProfile column names
-    if "firstName" in data:
-        profile.first_name = data["firstName"]          
-    if "lastName" in data:
-        profile.last_name = data["lastName"]            
-    if "phoneNumber" in data:
-        profile.phone_number = data["phoneNumber"]
-    if "dateOfBirth" in data:
-        profile.date_of_birth = data["dateOfBirth"]     
+    if "first_name" in data:
+        profile.first_name = data["first_name"]          
+    if "last_name" in data:
+        profile.last_name = data["last_name"]            
+    if "phone_number" in data:
+        profile.phone_number = data["phone_number"]
+    if "date_of_birth" in data:
+        profile.date_of_birth = data["date_of_birth"]     
     if "gender" in data:
         profile.gender = data["gender"]
     if "bio" in data:
@@ -1186,21 +1186,21 @@ def update_user_profile():
     preferences = user.preferences
 
     if preferences:
-        if "lookingFor" in data:
-            preferences.looking_for = data["lookingFor"]   
-        if "openFor" in data:
-            preferences.open_for = data["openFor"]
+        if "looking_for" in data:
+            preferences.looking_for = data["looking_for"]   
+        if "open_for" in data:
+            preferences.open_for = data["open_for"]
         if "hobbies" in data:
             preferences.hobbies = data["hobbies"]
         if "preferences" in data:
             preferences.preferences = data["preferences"]
     else:
         # Create preferences record if it doesn't exist
-        if any(k in data for k in ["lookingFor", "openFor", "hobbies", "preferences"]):
+        if any(k in data for k in ["looking_for", "open_for", "hobbies", "preferences"]):
             preferences = UserPreferences(
                 user_auth_id=user.id,
-                looking_for=data.get("lookingFor"),
-                open_for=data.get("openFor"),
+                looking_for=data.get("looking_for"),
+                open_for=data.get("open_for"),
                 hobbies=data.get("hobbies", []),
                 preferences=data.get("preferences", []),
             )
