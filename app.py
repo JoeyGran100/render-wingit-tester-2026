@@ -987,7 +987,7 @@ def sign_in():
             return jsonify({'error': 'Email and password are required'}), 400
 
         user = User.query.filter_by(email=email).first()
-        if not user or password != user.password:
+        if not user or not bcrypt.check_password_hash(user.password_hash, password):
             return jsonify({'message': 'Invalid credentials'}), 401
 
         payload = {
@@ -999,6 +999,7 @@ def sign_in():
             token = token.decode('utf-8')
 
         return jsonify({'message': 'Sign in successful', 'token': token}), 200
+
     except Exception as e:
         print("Sign-in error:", e)
         return jsonify({'error': str(e)}), 500
