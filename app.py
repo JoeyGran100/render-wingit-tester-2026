@@ -1549,6 +1549,12 @@ def getLocationInfo():
             'max_male_attendees': loc.max_male_attendees,           # ✅ was maleAttendees
             'max_female_attendees': loc.max_female_attendees,       # ✅ was femaleAttendees
             'start_time': loc.start_time.isoformat(),               # ✅ was separate date + time
+            'total_attending': Attendance.query.filter_by(location_id=loc.id).count(),
+            'male_attending': loc._count_by_gender(GenderEnum.male),
+            'female_attending': loc._count_by_gender(GenderEnum.female),
+            'spots_remaining': loc.max_attendees - Attendance.query.filter_by(location_id=loc.id).count(),
+            'male_spots_remaining': (loc.max_male_attendees - loc._count_by_gender(GenderEnum.male)) if loc.max_male_attendees is not None else None,
+            'female_spots_remaining': (loc.max_female_attendees - loc._count_by_gender(GenderEnum.female)) if loc.max_female_attendees is not None else None,
             'location_name': loc.location_name,                     # ✅ was location
             'latitude': loc.latitude,                               # ✅ was lat
             'longitude': loc.longitude,                             # ✅ was lng
