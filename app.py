@@ -1155,10 +1155,14 @@ def update_interests():
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
 
-    preferences = user.preferences
-
-    if not preferences:
-        return jsonify({"error": "User preferences not found"}), 404
+    # Create preferences row if it doesn't exist yet
+    if not user.preferences:
+        preferences = UserPreferences(user_id=user.id)
+        db.session.add(preferences)
+        db.session.flush()  # get the id without committing
+        user.preferences = preferences
+    else:
+        preferences = user.preferences
 
     data = request.get_json()
 
@@ -1189,6 +1193,7 @@ def update_interests():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+    
 
 # PUT METHOD TO UPDATE USER PROFILE
 @app.route("/updateUserProfile", methods=["PUT"])
