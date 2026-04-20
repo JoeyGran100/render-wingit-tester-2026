@@ -2233,7 +2233,7 @@ def get_user_matches_for_location(location_id):
 
                 
             other_user_data = UserProfile.query.filter_by(user_auth_id=matched_user_id).first()
-            other_user_preferences = UserPreferences.query.filter_by(user_auth_id=matched_user_id).all()
+            other_user_preferences = UserPreferences.query.filter_by(user_auth_id=matched_user_id).first()
 
             result.append({
                 'preferred_user_id': matched_user_id,  # ✅ renamed from 'user_id' for frontend clarity
@@ -2247,7 +2247,7 @@ def get_user_matches_for_location(location_id):
                 'looking_for': other_user_preferences.looking_for if other_user_preferences else None,
                 'open_for': other_user_preferences.open_for if other_user_preferences else None,
                 'hobbies': other_user_preferences.hobbies if other_user_preferences else [],
-                'preferences': other_user_preferences if other_user_preferences else [],
+                'preferences': other_user_preferences.preferences if other_user_preferences else [],
                 'image_url': image_url,
                 'status': match.status,
                 'location': match.location_id,
