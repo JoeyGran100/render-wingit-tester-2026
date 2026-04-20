@@ -1686,7 +1686,7 @@ def get_user_tickets():
             'event_host_id': location.event_host_id,
             'description': location.description,
             'is_matchmaking_enabled': location.is_matchmaking_enabled,
-            'start_time': location.start_time.isoformat(),
+            'start_time': location.start_time.strftime('%Y-%m-%dT%H:%M:%SZ'),  # adds Z
             'location_name': location.location_name,
             'checked_in': checked_in,
             'male_attendees': location._count_by_gender(GenderEnum.male),
