@@ -1697,7 +1697,6 @@ def get_user_tickets():
     return jsonify({'tickets': tickets}), 200
 
 
-
 @app.route('/attend', methods=['POST'])
 def attend_location():
     user = get_current_user_from_token()  # ← get user from token
@@ -1781,17 +1780,6 @@ def get_attendance():
         'attendees': attendee_list
     }), 200
 
-
-@app.route('/attendances/<int:location_id>', methods=['GET'])
-def get_user_attendance_for_location(location_id):
-    user = get_current_user_from_token()
-    if not user:
-        return jsonify({'message': 'Unauthorized'}), 401
-
-    record = Attendance.query.filter_by(user_id=user.id, location_id=location_id).first()
-    return jsonify({'hasAttended': record.hasAttended if record else False})
-
-
 # ✅ Route: Perform check-in
 @app.route('/checkin', methods=['POST'])
 def checkin():
@@ -1829,7 +1817,8 @@ def checkin():
         return jsonify({'message': f'All {location.max_attendees} slots are filled'}), 400
 
     try:
-        time_diff = (datetime.now(timezone.utc) - location.start_time).total_seconds()
+        start_time_utc = location.start_time.replace(tzinfo=timezone.utc)
+        time_diff = (datetime.now(timezone.utc) - start_time_utc).total_seconds()
         if time_diff > 600:
             location.is_checkin_closed = True
             db.session.commit()
@@ -1856,7 +1845,9 @@ def checkin():
         'checkin_status': f"{updated_checkin_count}/{location.max_attendees} checked in"
     }), 200
 
-
+# removed attandance at location in favour for the checkin since we want to display nr of user checked-in before matchmaking starts. 
+# We can still use the attend endpoint to mark that the user will attend, but the checkin endpoint will be responsible for counting how many users actually showed up and are present at the event when matchmaking starts. 
+# This way we have a more accurate count of attendees for matchmaking and can also handle no-shows better.
 @app.route('/checkin', methods=['GET'])
 def check_checkin():
     user = get_current_user_from_token()
@@ -2254,8 +2245,8 @@ def get_user_matches_for_location(location_id):
                 'bio': other_user_data.bio if other_user_data else None,
                 'gender': other_user_data.gender,
                 'phone_number': other_user_data.phone_number,
-                'looking_for': other_user_preferences.looking_for,
-                'open_for': other_user_preferences.open_for,
+                'looking_for': other_user_preferences.looking_for if other_user_preferences else None,
+                'open_for': other_user_preferences.open_for if other_user_preferences else None,
                 'hobbies': other_user_preferences.hobbies if other_user_preferences else [],
                 'preferences': other_user_preferences if other_user_preferences else [],
                 'image_url': image_url,
