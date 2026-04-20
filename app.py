@@ -583,8 +583,8 @@ def update_match_consent_status(user1_id, user2_id, match_id):
         print(f"No match found for match_id {match_id}")
         return
 
-    pref1 = UserPreferences.query.filter_by(user_id=user1_id, preferred_user_id=user2_id, match_id=match.id).first()
-    pref2 = UserPreferences.query.filter_by(user_id=user2_id, preferred_user_id=user1_id, match_id=match.id).first()
+    pref1 = MatchDecision.query.filter_by(user_id=user1_id, preferred_user_id=user2_id, match_id=match.id).first()
+    pref2 = MatchDecision.query.filter_by(user_id=user2_id, preferred_user_id=user1_id, match_id=match.id).first()
 
     if not pref1 or not pref2:
         # Not both preferences submitted yet
