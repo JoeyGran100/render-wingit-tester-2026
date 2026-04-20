@@ -636,8 +636,8 @@ def end_matchmaking_round(location_id):
     user_ids = [c.user_id for c in checkins]
     users = UserProfile.query.filter(UserProfile.user_auth_id.in_(user_ids)).all()
     
-    num_males = sum(1 for u in users if u.gender and u.gender.lower() in ['male', 'man', 'men'])
-    num_females = sum(1 for u in users if u.gender and u.gender.lower() in ['female', 'woman', 'women'])
+    num_males = sum(1 for u in users if u.gender == GenderEnum.female)
+    num_females = sum(1 for u in users if u.gender == GenderEnum.male)
     
     total_possible_pairs = num_males * num_females
     
@@ -858,11 +858,11 @@ def trigger_matchmaking_for_location(location_id):
             udata = UserProfile.query.filter_by(user_auth_id=u.id).first()
             if not udata or not udata.gender:
                 continue
-            gender = udata.gender.lower()
-            if gender in ['male', 'man', 'men']:
+            if udata.gender == GenderEnum.male:
                 males.append(u.id)
-            elif gender in ['female', 'woman', 'women']:
+            elif udata.gender == GenderEnum.female:
                 females.append(u.id)
+                print(f"Raw gender value: {repr(udata.gender)} type: {type(udata.gender)}")
 
         if not males or not females:
             print(f"No male-female pairs possible at location {location_id}")
