@@ -2226,7 +2226,7 @@ def get_user_matches_for_location(location_id):
                 print(f"SKIPPING: Existing preference found")
                 continue
 
-            user_image = UserImages.query.filter_by(user_auth_id=matched_user_id).first()
+            user_image = UserImages.query.filter_by(user_id=matched_user_id).first()
             image_url = None
             if user_image and user_image.imageString:
                     image_url = user_image.imageString
