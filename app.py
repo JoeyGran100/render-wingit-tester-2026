@@ -1148,6 +1148,48 @@ def logged_in_user_profile():
     return jsonify(response), 200
 
 
+@app.route("/preferences/interests", methods=["PATCH"])
+def update_interests():
+    user = get_current_user_from_token()
+
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    preferences = user.preferences
+
+    if not preferences:
+        return jsonify({"error": "User preferences not found"}), 404
+
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    if 'hobbies' in data:
+        if not isinstance(data['hobbies'], list):
+            return jsonify({"error": "hobbies must be a list"}), 400
+        preferences.hobbies = data['hobbies']
+
+    if 'preferences' in data:
+        if not isinstance(data['preferences'], list):
+            return jsonify({"error": "preferences must be a list"}), 400
+        preferences.preferences = data['preferences']
+
+    preferences.updated_at = datetime.utcnow()
+
+    try:
+        db.session.commit()
+        return jsonify({
+            "message": "Interests updated successfully",
+            "preferences": {
+                "hobbies": preferences.hobbies if preferences.hobbies else [],
+                "preferences": preferences.preferences if preferences.preferences else [],
+            }
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
 # PUT METHOD TO UPDATE USER PROFILE
 @app.route("/updateUserProfile", methods=["PUT"])
 def update_user_profile():
