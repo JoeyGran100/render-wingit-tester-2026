@@ -2241,7 +2241,7 @@ def get_user_matches_for_location(location_id):
                 'last_name': other_user_data.last_name,
                 'age': other_user_data.age,
                 'bio': other_user_data.bio if other_user_data else None,
-                'gender': other_user_data.gender,
+                'gender': other_user_data.gender.value if other_user_data.gender else None,
                 'phone_number': other_user_data.phone_number,
                 'looking_for': other_user_preferences.looking_for if other_user_preferences else None,
                 'open_for': other_user_preferences.open_for if other_user_preferences else None,
