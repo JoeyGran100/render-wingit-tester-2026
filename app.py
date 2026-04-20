@@ -1576,7 +1576,7 @@ def getLocationInfo():
             'max_attendees': loc.max_attendees,
             'max_male_attendees': loc.max_male_attendees,
             'max_female_attendees': loc.max_female_attendees,
-            'start_time': loc.start_time.isoformat(),
+            'start_time': loc.start_time.strftime('%Y-%m-%dT%H:%M:%S'),  # guaranteed T separator
             'total_attending': total,
             'male_attending': male,
             'female_attending': female,
