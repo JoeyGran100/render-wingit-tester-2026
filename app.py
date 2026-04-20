@@ -782,8 +782,8 @@ def is_round_complete(location_id):
         return False  # No matches in the round, so it's not "complete".
 
     for match in all_matches_for_round:
-        pref1 = UserPreferences.query.filter_by(user_id=match.user1_id, preferred_user_id=match.user2_id, match_id=match.id).first()
-        pref2 = UserPreferences.query.filter_by(user_id=match.user2_id, preferred_user_id=match.user1_id, match_id=match.id).first()
+        pref1 = MatchDecision.query.filter_by(user_id=match.user1_id, preferred_user_id=match.user2_id, match_id=match.id).first()
+        pref2 = MatchDecision.query.filter_by(user_id=match.user2_id, preferred_user_id=match.user1_id, match_id=match.id).first()
 
         # A match is only decided when both users have submitted their preference.
         if not pref1 or not pref2:
