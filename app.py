@@ -2237,7 +2237,6 @@ def get_user_matches_for_location(location_id):
 
             result.append({
                 'preferred_user_id': matched_user_id,  # ✅ renamed from 'user_id' for frontend clarity
-                'email': other_user_data.email,
                 'first_name': other_user_data.first_name,
                 'last_name': other_user_data.last_name,
                 'age': other_user_data.age,
