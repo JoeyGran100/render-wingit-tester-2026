@@ -2233,7 +2233,7 @@ def get_user_matches_for_location(location_id):
 
                 
             other_user_data = UserProfile.query.filter_by(user_auth_id=matched_user_id).first()
-            other_user_preferences = UserPreferences.query.filter_by(user_id=matched_user_id).all()
+            other_user_preferences = UserPreferences.query.filter_by(user_auth_id=matched_user_id).all()
 
             result.append({
                 'preferred_user_id': matched_user_id,  # ✅ renamed from 'user_id' for frontend clarity
