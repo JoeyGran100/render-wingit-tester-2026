@@ -1817,8 +1817,7 @@ def checkin():
         return jsonify({'message': f'All {location.max_attendees} slots are filled'}), 400
 
     try:
-        start_time_utc = location.start_time.replace(tzinfo=timezone.utc)
-        time_diff = (datetime.now(timezone.utc) - start_time_utc).total_seconds()
+        time_diff = (datetime.now(timezone.utc) - location.start_time).total_seconds()
         if time_diff > 600:
             location.is_checkin_closed = True
             db.session.commit()
