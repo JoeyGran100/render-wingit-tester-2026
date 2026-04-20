@@ -8,13 +8,12 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_socketio import SocketIO, join_room, disconnect, emit
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
-from sqlalchemy import or_, and_, desc, CheckConstraint
 from flask import request, jsonify
 import traceback
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 import jwt
 import logging
-from sqlalchemy import func
+from sqlalchemy import func, case, or_, and_, desc
 from flask_migrate import Migrate
 from collections import deque
 import enum
@@ -1522,16 +1521,39 @@ def postLocationInfo():
         traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
 
-
 @app.route('/eventLocationInfo', methods=['GET'])
 def getLocationInfo():
     user = get_current_user_from_token()
     if not user:
         return jsonify({'error': 'Unauthorized'}), 401
 
-    # ✅ Left join attendance scoped to this user
+    # Single query: all locations + user attendance + gender counts via aggregates
+    attendance_stats = (
+        db.session.query(
+            EventLocation.id.label('location_id'),
+            func.count(Attendance.id).label('total_attending'),
+            func.sum(
+                case((UserProfile.gender == GenderEnum.male, 1), else_=0)
+            ).label('male_attending'),
+            func.sum(
+                case((UserProfile.gender == GenderEnum.female, 1), else_=0)
+            ).label('female_attending'),
+        )
+        .outerjoin(Attendance, Attendance.location_id == EventLocation.id)
+        .outerjoin(User, User.id == Attendance.user_id)
+        .outerjoin(UserProfile, UserProfile.user_auth_id == User.id)
+        .group_by(EventLocation.id)
+        .subquery()
+    )
+
     results = (
-        db.session.query(EventLocation, Attendance.hasAttended)
+        db.session.query(
+            EventLocation,
+            Attendance.hasAttended,
+            attendance_stats.c.total_attending,
+            attendance_stats.c.male_attending,
+            attendance_stats.c.female_attending,
+        )
         .outerjoin(
             Attendance,
             and_(
@@ -1539,39 +1561,44 @@ def getLocationInfo():
                 Attendance.user_id == user.id
             )
         )
+        .outerjoin(attendance_stats, attendance_stats.c.location_id == EventLocation.id)
         .all()
     )
 
-    data = [
-        {
+    data = []
+    for loc, attended, total, male, female in results:
+        total = total or 0
+        male  = male  or 0
+        female = female or 0
+
+        data.append({
             'id': loc.id,
-            'max_attendees': loc.max_attendees,                     # ✅ was maxAttendees
-            'max_male_attendees': loc.max_male_attendees,           # ✅ was maleAttendees
-            'max_female_attendees': loc.max_female_attendees,       # ✅ was femaleAttendees
-            'start_time': loc.start_time.isoformat(),               # ✅ was separate date + time
-            'total_attending': Attendance.query.filter_by(location_id=loc.id).count(),
-            'male_attending': loc._count_by_gender(GenderEnum.male),
-            'female_attending': loc._count_by_gender(GenderEnum.female),
-            'spots_remaining': loc.max_attendees - Attendance.query.filter_by(location_id=loc.id).count(),
-            'male_spots_remaining': (loc.max_male_attendees - loc._count_by_gender(GenderEnum.male)) if loc.max_male_attendees is not None else None,
-            'female_spots_remaining': (loc.max_female_attendees - loc._count_by_gender(GenderEnum.female)) if loc.max_female_attendees is not None else None,
-            'location_name': loc.location_name,                     # ✅ was location
-            'latitude': loc.latitude,                               # ✅ was lat
-            'longitude': loc.longitude,                             # ✅ was lng
-            'total_price': float(loc.total_price) if loc.total_price else None,  # ✅ was totalPrice
-            'currency': loc.currency,                               # ✅ new field
+            'max_attendees': loc.max_attendees,
+            'max_male_attendees': loc.max_male_attendees,
+            'max_female_attendees': loc.max_female_attendees,
+            'start_time': loc.start_time.isoformat(),
+            'total_attending': total,
+            'male_attending': male,
+            'female_attending': female,
+            'spots_remaining': loc.max_attendees - total,
+            'male_spots_remaining': (loc.max_male_attendees - male) if loc.max_male_attendees is not None else None,
+            'female_spots_remaining': (loc.max_female_attendees - female) if loc.max_female_attendees is not None else None,
+            'location_name': loc.location_name,
+            'latitude': loc.latitude,
+            'longitude': loc.longitude,
+            'total_price': float(loc.total_price) if loc.total_price else None,
+            'currency': loc.currency,
             'description': loc.description,
-            'is_matchmaking_enabled': loc.is_matchmaking_enabled,   # ✅ was matchmake
-            'is_checkin_closed': loc.is_checkin_closed,             # ✅ new field
+            'is_matchmaking_enabled': loc.is_matchmaking_enabled,
+            'is_checkin_closed': loc.is_checkin_closed,
             'current_round': loc.current_round,
             'event_category': loc.event_category.name if loc.event_category else None,
             'event_category_id': loc.event_category_id,
             'event_host': loc.event_host.name if loc.event_host else None,
             'event_host_id': loc.event_host_id,
             'hasAttended': bool(attended) if attended is not None else False,
-        }
-        for loc, attended in results
-    ]
+        })
+
     return jsonify(data), 200
 
 
