@@ -2388,7 +2388,7 @@ def get_user_matches():
                     display_status = 'pending'
                     show_message_button = False
 
-            user_image = UserImages.query.filter_by(user_auth_id=other_user_id).first()
+            user_image = UserImages.query.filter_by(user_id=other_user_id).first()
 
             image_url = None
             if user_image and user_image.imageString:
@@ -2415,8 +2415,8 @@ def get_user_matches():
                 'bio': other_user_data.bio if other_user_data else None,
                 'hobbies': other_user_preferences.hobbies if other_user_preferences else [],
                 'preferences': other_user_preferences.preferences if other_user_preferences else [],
-                'looking_for': other_user_data.looking_for,
-                'open_for': other_user_data.open_for,
+                'looking_for': other_user_preferences.looking_for if other_user_preferences else [],
+                'open_for': other_user_preferences.open_for if other_user_preferences else [],
                 # Image
                 'image_url': image_url
             })
