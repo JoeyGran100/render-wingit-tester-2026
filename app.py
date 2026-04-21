@@ -1500,9 +1500,16 @@ def postLocationInfo():
         try:
             category = EventCategory.query.filter_by(name=category_name).first()
             if not category:
-                category = EventCategory(name=category_name)
-                db.session.add(category)
-                db.session.commit()
+                try:
+                    category = EventCategory(name=category_name)
+                    db.session.add(category)
+                    db.session.flush()  # catch constraint errors before full commit
+                except IntegrityError:
+                    db.session.rollback()
+                    # Another request created it in between, just fetch it
+                    category = EventCategory.query.filter_by(name=category_name).first()
+                    if not category:
+                        return jsonify({"error": "Category could not be created"}), 500
         except SQLAlchemyError as e:
             traceback.print_exc()
             db.session.rollback()
@@ -1523,7 +1530,6 @@ def postLocationInfo():
 
         # ===== FIELDS =====
         try:
-            # ✅ date + time merged into a single start_time DateTime
             date_str = data.get('date')         # "YYYY-MM-DD"
             time_str = data.get('time')         # "HH:MM"
             if not date_str or not time_str:
@@ -1535,19 +1541,19 @@ def postLocationInfo():
                 max_attendees=int(data.get('maxAttendees')),
                 max_male_attendees=int(data['maxMaleAttendees']) if data.get('maxMaleAttendees') is not None else None,
                 max_female_attendees=int(data['maxFemaleAttendees']) if data.get('maxFemaleAttendees') is not None else None,
-                start_time=start_time,                              
-                location_name=data.get('location'),                 
-                latitude=float(data.get('lat')),                    
-                longitude=float(data.get('lng')),                   
-                total_price=float(data.get('totalPrice')),          
-                currency=data.get('currency', 'SEK'),               
+                start_time=start_time,
+                location_name=data.get('location'),
+                latitude=float(data.get('lat')),
+                longitude=float(data.get('lng')),
+                total_price=float(data.get('totalPrice')),
+                currency=data.get('currency', 'SEK'),
                 description=data.get('description'),
-                is_matchmaking_enabled=bool(data.get("matchmake", False)),  # ✅ was matchmake
+                is_matchmaking_enabled=bool(data.get("matchmake", False)),
                 event_category_id=category.id,
                 event_host_id=host.id,
             )
 
-            # ✅ Validate gender limits before committing
+            # Validate gender limits before committing
             new_event.validate_attendee_totals()
 
             db.session.add(new_event)
@@ -1567,6 +1573,7 @@ def postLocationInfo():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
+
 
 @app.route('/eventLocationInfo', methods=['GET'])
 def getLocationInfo():
