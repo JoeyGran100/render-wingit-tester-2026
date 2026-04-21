@@ -2409,7 +2409,7 @@ def get_user_matches():
                 'last_name': other_user_data.last_name,
                 'email': other_user.email,
                 'age': other_user_data.age,
-                'gender': other_user_data.gender,
+                'gender': other_user_data.gender.value if other_user_data.gender else None,
                 'phone_number': other_user_data.phone_number,
                 
                 'bio': other_user_data.bio if other_user_data else None,
