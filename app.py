@@ -2411,7 +2411,6 @@ def get_user_matches():
                 'age': other_user_data.age,
                 'gender': other_user_data.gender.value if other_user_data.gender else None,
                 'phone_number': other_user_data.phone_number,
-                
                 'bio': other_user_data.bio if other_user_data else None,
                 'hobbies': other_user_preferences.hobbies if other_user_preferences else [],
                 'preferences': other_user_preferences.preferences if other_user_preferences else [],
