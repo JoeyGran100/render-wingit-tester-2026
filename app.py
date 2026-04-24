@@ -1560,10 +1560,14 @@ def postLocationInfo():
             return jsonify({"error": "maxMaleAttendees and maxFemaleAttendees must be integers"}), 400
 
         # If either is null, divide evenly — females get the extra spot on odd numbers
-        if max_male is None or max_female is None:
+        if max_male is None and max_female is None:
             half = max_attendees // 2
             max_male   = half
-            max_female = max_attendees - half  # female gets +1 on odd
+            max_female = max_attendees - half
+        elif max_male is None:
+            max_male = max_attendees - max_female
+        elif max_female is None:
+            max_female = max_attendees - max_male
 
         # Validate combined cap does not exceed total
         if max_male + max_female > max_attendees:
