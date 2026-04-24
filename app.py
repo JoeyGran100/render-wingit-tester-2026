@@ -1493,85 +1493,138 @@ def postLocationInfo():
         # ===== AUTH =====
         user = get_current_user_from_token()
         if not user:
+            app.logger.warning("[postLocationInfo] Unauthorized request")
             return jsonify({'error': 'Unauthorized'}), 401
+        app.logger.info(f"[postLocationInfo] Authenticated user: {user}")
 
         # ===== REQUEST DATA =====
         data = request.get_json()
         if not data:
+            app.logger.warning("[postLocationInfo] No JSON body received")
             return jsonify({'error': 'No data provided'}), 400
+        app.logger.info(f"[postLocationInfo] Raw request data: {data}")
 
         # ===== CATEGORY =====
         category_name = data.get("event_category")
+        app.logger.info(f"[postLocationInfo] event_category: {category_name}")
         if not category_name:
             return jsonify({"error": "event_category is required"}), 400
 
         try:
             category = EventCategory.query.filter_by(name=category_name).first()
             if not category:
+                app.logger.info(f"[postLocationInfo] Category '{category_name}' not found, creating...")
                 try:
                     category = EventCategory(name=category_name)
                     db.session.add(category)
-                    db.session.flush()  # catch constraint errors before full commit
+                    db.session.flush()
+                    app.logger.info(f"[postLocationInfo] Category created with id: {category.id}")
                 except IntegrityError:
                     db.session.rollback()
-                    # Another request created it in between, just fetch it
+                    app.logger.warning(f"[postLocationInfo] IntegrityError on category creation, re-fetching...")
                     category = EventCategory.query.filter_by(name=category_name).first()
                     if not category:
+                        app.logger.error("[postLocationInfo] Category could not be created or fetched")
                         return jsonify({"error": "Category could not be created"}), 500
+            else:
+                app.logger.info(f"[postLocationInfo] Found existing category: id={category.id}, name={category.name}")
         except SQLAlchemyError as e:
+            app.logger.error(f"[postLocationInfo] SQLAlchemyError during category processing: {e}")
             traceback.print_exc()
             db.session.rollback()
             return jsonify({"error": "Category processing failed"}), 500
 
         # ===== HOST =====
         host_id = data.get("event_host_id")
+        app.logger.info(f"[postLocationInfo] event_host_id: {host_id}")
         if host_id is None:
             return jsonify({"error": "event_host_id is required"}), 400
 
         try:
             host = EventHost.query.get(host_id)
             if not host:
+                app.logger.warning(f"[postLocationInfo] No host found for id: {host_id}")
                 return jsonify({"error": "Invalid event_host_id"}), 400
+            app.logger.info(f"[postLocationInfo] Found host: id={host.id}")
         except SQLAlchemyError as e:
+            app.logger.error(f"[postLocationInfo] SQLAlchemyError during host lookup: {e}")
             traceback.print_exc()
             return jsonify({"error": "Host processing failed"}), 500
 
-        # ===== FIELDS =====
+        # ===== DATE & TIME =====
+        # Frontend sends separate 'date' ("YYYY-MM-DD") and 'time' ("HH:MM")
+        # Backend stores as combined 'start_time' (DateTime)
         try:
-            date_str = data.get('date')         # "YYYY-MM-DD"
-            time_str = data.get('time')         # "HH:MM"
+            date_str = data.get('date')
+            time_str = data.get('time')
+            app.logger.info(f"[postLocationInfo] date: '{date_str}', time: '{time_str}'")
+
             if not date_str or not time_str:
+                app.logger.warning("[postLocationInfo] Missing date or time field")
                 return jsonify({"error": "date and time are required"}), 400
 
-            start_time = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+            # Normalize time — strip seconds if frontend sends "HH:MM:SS"
+            time_str_normalized = time_str[:5]  # take only "HH:MM"
+            app.logger.info(f"[postLocationInfo] Normalized time: '{time_str_normalized}'")
+
+            start_time = datetime.strptime(f"{date_str} {time_str_normalized}", "%Y-%m-%d %H:%M")
+            app.logger.info(f"[postLocationInfo] Parsed start_time: {start_time}")
+
+        except ValueError as e:
+            app.logger.error(f"[postLocationInfo] Failed to parse date/time: date='{date_str}' time='{time_str}' error={e}")
+            return jsonify({"error": "Invalid date or time format", "details": str(e)}), 400
+
+        # ===== BUILD EVENT =====
+        try:
+            max_attendees     = data.get('maxAttendees')
+            max_male          = data.get('maxMaleAttendees')
+            max_female        = data.get('maxFemaleAttendees')
+            location_name     = data.get('location')
+            lat               = data.get('lat')
+            lng               = data.get('lng')
+            total_price       = data.get('totalPrice')
+            currency          = data.get('currency', 'SEK')
+            description       = data.get('description')
+            matchmake         = data.get('matchmake', False)
+
+            app.logger.info(
+                f"[postLocationInfo] Building event: "
+                f"maxAttendees={max_attendees}, maxMale={max_male}, maxFemale={max_female}, "
+                f"location='{location_name}', lat={lat}, lng={lng}, "
+                f"totalPrice={total_price}, currency={currency}, "
+                f"matchmake={matchmake}, description='{description}'"
+            )
 
             new_event = EventLocation(
-                max_attendees=int(data.get('maxAttendees')),
-                max_male_attendees=int(data['maxMaleAttendees']) if data.get('maxMaleAttendees') is not None else None,
-                max_female_attendees=int(data['maxFemaleAttendees']) if data.get('maxFemaleAttendees') is not None else None,
+                max_attendees=int(max_attendees),
+                max_male_attendees=int(max_male) if max_male is not None else None,
+                max_female_attendees=int(max_female) if max_female is not None else None,
                 start_time=start_time,
-                location_name=data.get('location'),
-                latitude=float(data.get('lat')),
-                longitude=float(data.get('lng')),
-                total_price=float(data.get('totalPrice')),
-                currency=data.get('currency', 'SEK'),
-                description=data.get('description'),
-                is_matchmaking_enabled=bool(data.get("matchmake", False)),
+                location_name=location_name,
+                latitude=float(lat),
+                longitude=float(lng),
+                total_price=float(total_price),
+                currency=currency,
+                description=description,
+                is_matchmaking_enabled=bool(matchmake),
                 event_category_id=category.id,
                 event_host_id=host.id,
             )
 
-            # Validate gender limits before committing
+            app.logger.info("[postLocationInfo] Validating attendee totals...")
             new_event.validate_attendee_totals()
 
             db.session.add(new_event)
             db.session.commit()
+            app.logger.info(f"[postLocationInfo] Event committed successfully with id: {new_event.id}")
 
         except (TypeError, ValueError) as e:
+            app.logger.error(f"[postLocationInfo] Type/Value error building event: {e}")
             traceback.print_exc()
             db.session.rollback()
             return jsonify({"error": "Invalid input types", "details": str(e)}), 400
         except SQLAlchemyError as e:
+            app.logger.error(f"[postLocationInfo] SQLAlchemyError on commit: {e}")
             traceback.print_exc()
             db.session.rollback()
             return jsonify({"error": "Failed to add location"}), 500
@@ -1579,6 +1632,7 @@ def postLocationInfo():
         return jsonify({'message': "New event location added", "id": new_event.id}), 201
 
     except Exception as e:
+        app.logger.error(f"[postLocationInfo] Unhandled exception: {e}")
         traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
 
