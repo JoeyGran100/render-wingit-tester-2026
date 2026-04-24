@@ -1505,33 +1505,35 @@ def postLocationInfo():
         app.logger.info(f"[postLocationInfo] Raw request data: {data}")
 
         # ===== CATEGORY =====
-        category_name = data.get("event_category")
-        app.logger.info(f"[postLocationInfo] event_category: {category_name}")
+        category_name = data.get("event_category", "").strip()
+        app.logger.info(f"[postLocationInfo] event_category: '{category_name}'")
         if not category_name:
             return jsonify({"error": "event_category is required"}), 400
 
         try:
             category = EventCategory.query.filter_by(name=category_name).first()
+            app.logger.info(f"[postLocationInfo] Category lookup result: {category}")
+
             if not category:
-                app.logger.info(f"[postLocationInfo] Category '{category_name}' not found, creating...")
-                try:
-                    category = EventCategory(name=category_name)
-                    db.session.add(category)
-                    db.session.flush()
-                    app.logger.info(f"[postLocationInfo] Category created with id: {category.id}")
-                except IntegrityError:
-                    db.session.rollback()
-                    app.logger.warning(f"[postLocationInfo] IntegrityError on category creation, re-fetching...")
-                    category = EventCategory.query.filter_by(name=category_name).first()
-                    if not category:
-                        app.logger.error("[postLocationInfo] Category could not be created or fetched")
-                        return jsonify({"error": "Category could not be created"}), 500
-            else:
-                app.logger.info(f"[postLocationInfo] Found existing category: id={category.id}, name={category.name}")
-        except SQLAlchemyError as e:
-            app.logger.error(f"[postLocationInfo] SQLAlchemyError during category processing: {e}")
-            traceback.print_exc()
+                app.logger.info(f"[postLocationInfo] Creating new category: '{category_name}'")
+                category = EventCategory(name=category_name)
+                db.session.add(category)
+                db.session.flush()
+                app.logger.info(f"[postLocationInfo] Category created with id: {category.id}")
+
+        except IntegrityError:
             db.session.rollback()
+            app.logger.warning(f"[postLocationInfo] IntegrityError — race condition, re-fetching '{category_name}'")
+            category = EventCategory.query.filter_by(name=category_name).first()
+            app.logger.info(f"[postLocationInfo] Re-fetched category: {category}")
+            if not category:
+                app.logger.error("[postLocationInfo] Category still not found after rollback")
+                return jsonify({"error": "Category could not be created"}), 500
+
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            app.logger.error(f"[postLocationInfo] SQLAlchemyError on category: {e}")
+            traceback.print_exc()
             return jsonify({"error": "Category processing failed"}), 500
 
         # ===== HOST =====
@@ -1564,7 +1566,7 @@ def postLocationInfo():
                 return jsonify({"error": "date and time are required"}), 400
 
             # Normalize time — strip seconds if frontend sends "HH:MM:SS"
-            time_str_normalized = time_str[:5]  # take only "HH:MM"
+            time_str_normalized = time_str[:5]
             app.logger.info(f"[postLocationInfo] Normalized time: '{time_str_normalized}'")
 
             start_time = datetime.strptime(f"{date_str} {time_str_normalized}", "%Y-%m-%d %H:%M")
@@ -1576,16 +1578,16 @@ def postLocationInfo():
 
         # ===== BUILD EVENT =====
         try:
-            max_attendees     = data.get('maxAttendees')
-            max_male          = data.get('maxMaleAttendees')
-            max_female        = data.get('maxFemaleAttendees')
-            location_name     = data.get('location')
-            lat               = data.get('lat')
-            lng               = data.get('lng')
-            total_price       = data.get('totalPrice')
-            currency          = data.get('currency', 'SEK')
-            description       = data.get('description')
-            matchmake         = data.get('matchmake', False)
+            max_attendees = data.get('maxAttendees')
+            max_male      = data.get('maxMaleAttendees')
+            max_female    = data.get('maxFemaleAttendees')
+            location_name = data.get('location')
+            lat           = data.get('lat')
+            lng           = data.get('lng')
+            total_price   = data.get('totalPrice')
+            currency      = data.get('currency', 'SEK')
+            description   = data.get('description')
+            matchmake     = data.get('matchmake', False)
 
             app.logger.info(
                 f"[postLocationInfo] Building event: "
@@ -1635,7 +1637,7 @@ def postLocationInfo():
         app.logger.error(f"[postLocationInfo] Unhandled exception: {e}")
         traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
-
+    
 
 @app.route('/eventLocationInfo', methods=['GET'])
 def getLocationInfo():
