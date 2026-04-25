@@ -35,7 +35,7 @@ import secrets       # built-in (used for qr_token generation)
 
 app = Flask(__name__)
 app.config[
-    'SQLALCHEMY_DATABASE_URI'] = "postgresql://wingit07_render_example_user:DRZdecsGNvthEU5aDgPrqWLXxFJ18TZU@dpg-d7igcnl8nd3s73dmmg2g-a.frankfurt-postgres.render.com/wingit07_render_example"
+    'SQLALCHEMY_DATABASE_URI'] = "postgresql://wingit011_render_example_user:Izoj0x6W3PjQj99z5pZdcbpsPRMszUvC@dpg-d7m9uc37uimc73cqbsl0-a.frankfurt-postgres.render.com/wingit011_render_example"
 socketio = SocketIO(app)
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)  # 2️⃣ migrate second, now db exists
