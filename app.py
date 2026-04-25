@@ -1566,24 +1566,6 @@ def get_my_image():
     else:
         return jsonify({"error": "No image found for this user"}), 404
 
-@app.route('/venues', methods=['GET'])
-def get_venues():
-    try:
-        venues = Venue.query.order_by(Venue.name.asc()).all()
-        return jsonify([
-            {
-                'id':        v.id,
-                'name':      v.name,
-                'address':   v.address,
-                'latitude':  v.latitude,
-                'longitude': v.longitude,
-            }
-            for v in venues
-        ]), 200
-    except Exception:
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error'}), 500
-    
 
 @app.route('/venues', methods=['POST'])
 def create_venue():
