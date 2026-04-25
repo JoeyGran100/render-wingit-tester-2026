@@ -1626,7 +1626,6 @@ def get_venues():
 @app.route('/eventLocationInfo', methods=['POST'])
 def postLocationInfo():
     try:
-        # ===== AUTH =====
         user = get_current_user_from_token()
         if not user:
             return jsonify({'error': 'Unauthorized'}), 401
@@ -1636,7 +1635,6 @@ def postLocationInfo():
             return jsonify({'error': 'No data provided'}), 400
 
         # ===== CATEGORY =====
-        # ✅ now accepts event_category_id instead of name string
         category_id = data.get("event_category_id")
         if category_id is None:
             return jsonify({"error": "event_category_id is required"}), 400
@@ -1654,22 +1652,34 @@ def postLocationInfo():
         if not host:
             return jsonify({"error": "Invalid event_host_id"}), 400
 
-        # ✅ optional: verify the host belongs to the requesting user
         if host.user_id is not None and host.user_id != user.id:
             return jsonify({"error": "You do not own this event host"}), 403
 
         # ===== VENUE =====
-        # ✅ replaces location/lat/lng — just a FK now
-        venue_id = data.get("venue_id")
-        if venue_id is None:
-            return jsonify({"error": "venue_id is required"}), 400
+        # ✅ user types venue details — create or reuse by name
+        venue_name = data.get("venue_name", "").strip()
+        if not venue_name:
+            return jsonify({"error": "venue_name is required"}), 400
 
-        venue = db.session.get(Venue, venue_id)
+        lat = data.get("latitude")
+        lng = data.get("longitude")
+
+        if lat is None or lng is None:
+            return jsonify({"error": "latitude and longitude are required"}), 400
+
+        # ✅ reuse existing venue if name matches, otherwise create new
+        venue = Venue.query.filter_by(name=venue_name).first()
         if not venue:
-            return jsonify({"error": "Invalid venue_id"}), 400
+            venue = Venue(
+                name      = venue_name,
+                address   = data.get("venue_address"),
+                latitude  = float(lat),
+                longitude = float(lng),
+            )
+            db.session.add(venue)
+            db.session.flush()  # get venue.id without committing yet
 
         # ===== DATE & TIME =====
-        # ✅ single ISO start_time instead of separate date + time fields
         start_time_str = data.get('start_time')
         if not start_time_str:
             return jsonify({"error": "start_time is required"}), 400
@@ -1677,16 +1687,16 @@ def postLocationInfo():
         try:
             start_time = datetime.strptime(start_time_str[:16], "%Y-%m-%dT%H:%M")
         except ValueError as e:
-            return jsonify({"error": "Invalid start_time format, expected ISO 8601 e.g. 2025-06-01T19:00", "details": str(e)}), 400
+            return jsonify({"error": "Invalid start_time format", "details": str(e)}), 400
 
         # ===== ATTENDEE LOGIC =====
         try:
-            max_attendees = int(data.get('max_attendees'))  # ✅ renamed from maxAttendees
+            max_attendees = int(data.get('max_attendees'))
         except (TypeError, ValueError):
             return jsonify({"error": "max_attendees must be a valid integer"}), 400
 
-        raw_male   = data.get('max_male_attendees')         # ✅ renamed
-        raw_female = data.get('max_female_attendees')       # ✅ renamed
+        raw_male   = data.get('max_male_attendees')
+        raw_female = data.get('max_female_attendees')
 
         try:
             max_male   = int(raw_male)   if raw_male   is not None else None
@@ -1694,7 +1704,6 @@ def postLocationInfo():
         except (TypeError, ValueError):
             return jsonify({"error": "max_male_attendees and max_female_attendees must be integers"}), 400
 
-        # If either is null, divide evenly — females get the extra spot on odd numbers
         if max_male is None and max_female is None:
             half       = max_attendees // 2
             max_male   = half
@@ -1714,10 +1723,10 @@ def postLocationInfo():
 
         # ===== BUILD EVENT =====
         try:
-            base_price = data.get('base_price')             # ✅ renamed from totalPrice
+            base_price = data.get('base_price')
 
             new_event = EventLocation(
-                venue_id               = venue.id,          # ✅ FK to Venue
+                venue_id               = venue.id,
                 max_attendees          = max_attendees,
                 max_male_attendees     = max_male,
                 max_female_attendees   = max_female,
@@ -1725,7 +1734,7 @@ def postLocationInfo():
                 base_price             = float(base_price) if base_price is not None else None,
                 currency               = data.get('currency', 'SEK'),
                 description            = data.get('description', ''),
-                is_matchmaking_enabled = bool(data.get('is_matchmaking_enabled', False)),  # ✅ renamed
+                is_matchmaking_enabled = bool(data.get('is_matchmaking_enabled', False)),
                 event_category_id      = category.id,
                 event_host_id          = host.id,
             )
@@ -1742,14 +1751,15 @@ def postLocationInfo():
             return jsonify({"error": "Failed to save event"}), 500
 
         return jsonify({
-            'message': "Event created successfully",
-            'id':      new_event.id
+            'message':    "Event created successfully",
+            'id':         new_event.id,
+            'venue_id':   venue.id,     # ✅ return so frontend knows the resolved venue
         }), 201
 
     except Exception:
         traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
-    
+
 
 @app.route('/eventLocationInfo', methods=['GET'])
 def getLocationInfo():
