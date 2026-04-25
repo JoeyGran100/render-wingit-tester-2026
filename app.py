@@ -1566,6 +1566,61 @@ def get_my_image():
     else:
         return jsonify({"error": "No image found for this user"}), 404
 
+@app.route('/venues', methods=['GET'])
+def get_venues():
+    try:
+        venues = Venue.query.order_by(Venue.name.asc()).all()
+        return jsonify([
+            {
+                'id':        v.id,
+                'name':      v.name,
+                'address':   v.address,
+                'latitude':  v.latitude,
+                'longitude': v.longitude,
+            }
+            for v in venues
+        ]), 200
+    except Exception:
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
+    
+
+@app.route('/venues', methods=['POST'])
+def create_venue():
+    try:
+        user = get_current_user_from_token()
+        if not user:
+            return jsonify({'error': 'Unauthorized'}), 401
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        name = data.get('name', '').strip()
+        if not name:
+            return jsonify({'error': 'name is required'}), 400
+
+        new_venue = Venue(
+            name      = name,
+            address   = data.get('address'),
+            latitude  = data.get('latitude'),
+            longitude = data.get('longitude'),
+        )
+        db.session.add(new_venue)
+        db.session.commit()
+
+        return jsonify({
+            'id':        new_venue.id,
+            'name':      new_venue.name,
+            'address':   new_venue.address,
+            'latitude':  new_venue.latitude,
+            'longitude': new_venue.longitude,
+        }), 201
+
+    except Exception:
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
+
 
 @app.route('/eventLocationInfo', methods=['POST'])
 def postLocationInfo():
