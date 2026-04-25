@@ -1755,6 +1755,13 @@ def getLocationInfo():
         .group_by(EventLocation.id)
         .subquery()
     )
+    
+        # ✅ subquery that checks if THIS user has an attendance row for each event
+    user_attendance = (
+        db.session.query(Attendance.location_id)
+        .filter(Attendance.user_id == user.id)
+        .subquery()
+    )
 
     results = (
         db.session.query(
@@ -1762,13 +1769,15 @@ def getLocationInfo():
             attendance_stats.c.total_attending,
             attendance_stats.c.male_attending,
             attendance_stats.c.female_attending,
+            user_attendance.c.location_id.isnot(None).label('is_attending'),  # ✅ True if row exists
         )
         .outerjoin(attendance_stats, attendance_stats.c.location_id == EventLocation.id)
+        .outerjoin(user_attendance, user_attendance.c.location_id == EventLocation.id)  # ✅
         .all()
     )
 
     data = []
-    for loc, total, male, female in results:
+    for loc, total, male, female, is_attending in results:  # ✅ unpack is_attending
         total  = total  or 0
         male   = male   or 0
         female = female or 0
@@ -1810,6 +1819,7 @@ def getLocationInfo():
             'event_category_id': loc.event_category_id,
             'event_host':        loc.event_host.name if loc.event_host else None,
             'event_host_id':     loc.event_host_id,
+            'is_attending':           bool(is_attending),  # ✅ True = orange, False = gray
         })
 
     return jsonify(data), 200
