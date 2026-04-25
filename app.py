@@ -1799,6 +1799,12 @@ def get_all_event_hosts():
         return jsonify({"error": "internal_server_error"}), 500
 
 
+@app.route('/event-categories', methods=['GET'])
+def get_event_categories():
+    categories = EventCategory.query.order_by(EventCategory.name.asc()).all()
+    return jsonify([{'id': c.id, 'name': c.name} for c in categories]), 200
+
+
 @app.route('/my_tickets', methods=['GET'])
 def get_user_tickets():
     user = get_current_user_from_token()
