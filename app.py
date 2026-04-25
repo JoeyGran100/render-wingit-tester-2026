@@ -1928,12 +1928,9 @@ def get_user_tickets():
 
 @app.route('/attend', methods=['POST'])
 def attend_location():
-    user = get_current_user_from_token()  # ← get user from token
-    
+    user = get_current_user_from_token()
     if not user:
         return jsonify({'message': 'Unauthorized'}), 401
-    
-    user_id = user.id  # ← extract id from the returned user object
 
     data = request.get_json()
     location_id = data.get('location_id')
@@ -1941,28 +1938,37 @@ def attend_location():
     if not location_id:
         return jsonify({'message': 'Missing location_id'}), 400
 
-    location = EventLocation.query.get(location_id)
-    profile = UserProfile.query.filter_by(user_auth_id=user_id).first()
-    print(f"Profile found: {profile}, Gender: {profile.gender if profile else 'NO PROFILE'}")
-
+    location = db.session.get(EventLocation, location_id)  # ✅ replaces deprecated .query.get()
     if not location:
-        return jsonify({'message': 'Invalid location'}), 404 
+        return jsonify({'message': 'Invalid location'}), 404
 
+    profile = UserProfile.query.filter_by(user_auth_id=user.id).first()
     if not profile or not profile.gender:
         return jsonify({'message': 'User profile or gender not set'}), 400
 
-    if Attendance.query.filter_by(user_id=user_id, location_id=location_id).first():
+    if Attendance.query.filter_by(user_id=user.id, location_id=location_id).first():
         return jsonify({'message': 'User already marked as attending'}), 400
 
     can_attend, reason = location.can_register(profile.gender)
     if not can_attend:
-       return jsonify({'message': reason}), 400
-   
-    attendance = Attendance(user_id=user_id, location_id=location_id, hasAttended=True)
+        return jsonify({'message': reason}), 400
+
+    attendance = Attendance(
+        user_id     = user.id,
+        location_id = location_id,
+    )
     db.session.add(attendance)
+
+    # ✅ also create the Ticket when attendance is confirmed
+    ticket = Ticket(
+        attendance  = attendance,
+        amount_paid = float(location.base_price) if location.base_price else None,
+        currency    = location.currency,
+    )
+    db.session.add(ticket)
     db.session.commit()
 
-    return jsonify({'message': 'User marked as attending and counts updated'}), 200
+    return jsonify({'message': 'Attendance confirmed', 'ticket_id': ticket.id}), 200
 
 
 @app.route('/attend', methods=['GET'])
@@ -1975,7 +1981,7 @@ def get_attendance():
     if not location_id:
         return jsonify({'message': 'location_id is required'}), 400
 
-    location = EventLocation.query.get(location_id)
+    location = db.session.get(EventLocation, location_id)  # ✅ replaces deprecated .query.get()
     if not location:
         return jsonify({'message': 'Location not found'}), 404
 
@@ -1983,31 +1989,42 @@ def get_attendance():
 
     attendee_list = []
     for attendance in attendances:
-        attendee_user = User.query.get(attendance.user_id)
-        profile = UserProfile.query.filter_by(user_auth_id=attendee_user.id).first()
-        checked_in = CheckIn.query.filter_by(user_id=attendee_user.id, location_id=location.id).first() is not None
+        attendee_user = db.session.get(User, attendance.user_id)  # ✅ replaces deprecated .query.get()
+        if not attendee_user:
+            continue
+
+        profile    = UserProfile.query.filter_by(user_auth_id=attendee_user.id).first()
+        checked_in = CheckIn.query.filter_by(
+            user_id     = attendee_user.id,
+            location_id = location.id
+        ).first() is not None  # ✅ single source of truth — no is_attending needed
 
         attendee_list.append({
-            'user_id': attendee_user.id,
-            'email': attendee_user.email,
-            'gender': profile.gender.value if profile and profile.gender else None,
+            'user_id':      attendee_user.id,
+            'email':        attendee_user.email,
+            'gender':       profile.gender.value if profile and profile.gender else None,
             'attending_at': attendance.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
-            'checked_in': checked_in,
-            'hasAttended': attendance.hasAttended
+            'checked_in':   checked_in,
         })
 
-    male_count = location._count_by_gender(GenderEnum.male)
+    male_count   = location._count_by_gender(GenderEnum.male)
     female_count = location._count_by_gender(GenderEnum.female)
 
     return jsonify({
-       'location_name': location.location_name,
-       'start_time': location.start_time.isoformat(),
-       'male_attendees': male_count,
-       'female_attendees': female_count,
-       'total_attendees': male_count + female_count,
-       'max_attendees': location.max_attendees,
-        'attendees': attendee_list
+        # ✅ location_name replaced by nested venue
+        'venue':           {
+            'id':        location.venue.id,
+            'name':      location.venue.name,
+            'address':   location.venue.address,
+        },
+        'start_time':      location.start_time.isoformat(),
+        'male_attendees':  male_count,
+        'female_attendees': female_count,
+        'total_attendees': male_count + female_count,
+        'max_attendees':   location.max_attendees,
+        'attendees':       attendee_list
     }), 200
+
 
 # ✅ Route: Perform check-in
 @app.route('/checkin', methods=['POST'])
