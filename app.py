@@ -28,6 +28,10 @@ from xml.etree.ElementTree import Comment
 from uuid import uuid4
 from flask import redirect
 from flask_bcrypt import Bcrypt
+import qrcode        # pip install qrcode[pil]
+import io            # built-in
+import base64        # built-in
+import secrets       # built-in (used for qr_token generation)
 
 app = Flask(__name__)
 app.config[
@@ -147,44 +151,65 @@ class UserImages(db.Model):
 class EventHost(db.Model):
     __tablename__ = 'event_hosts'
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    name = db.Column(db.String(100), unique=True, nullable=False)
+    id      = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name    = db.Column(db.String(100), unique=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user_credentials.id', ondelete='SET NULL'), nullable=True)
+
+    owner  = db.relationship('User', backref='event_host')
+    events = db.relationship('EventLocation', back_populates='event_host')  # ✅ back_populates target
 
 
 class EventCategory(db.Model):
     __tablename__ = 'event_categories'
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id   = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
 
 
+class Venue(db.Model):
+    """The physical place. Reusable across events."""
+    __tablename__ = 'venues'
+
+    id        = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name      = db.Column(db.String(200), nullable=False)
+    address   = db.Column(db.String(300), nullable=True)
+    latitude  = db.Column(db.Float)
+    longitude = db.Column(db.Float)
+
+    events = db.relationship('EventLocation', back_populates='venue')
+
+
 class EventLocation(db.Model):
+    """One specific event instance at a venue."""
     __tablename__ = 'event_locations'
 
-    id = db.Column(db.Integer, primary_key=True)
-    max_attendees = db.Column(db.Integer, nullable=False)
-    max_male_attendees = db.Column(db.Integer, nullable=True)
-    max_female_attendees = db.Column(db.Integer, nullable=True)
-    start_time = db.Column(db.DateTime, nullable=False)
-    location_name = db.Column(db.String(200), nullable=False)
-    latitude = db.Column(db.Float)
-    longitude = db.Column(db.Float)
-    description = db.Column(db.String(500))
-    total_price = db.Column(db.Numeric(10, 2))
-    currency = db.Column(db.String(10), default="SEK")
-    is_checkin_closed = db.Column(db.Boolean, default=False)
-    is_matchmaking_enabled = db.Column(db.Boolean, default=False)
-    current_round = db.Column(db.Integer, default=1)
-    event_category_id = db.Column(db.Integer, db.ForeignKey('event_categories.id'), nullable=False)
-    event_host_id = db.Column(db.Integer, db.ForeignKey('event_hosts.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
+    id                     = db.Column(db.Integer, primary_key=True)
+    venue_id               = db.Column(db.Integer, db.ForeignKey('venues.id'), nullable=False)
+    event_category_id      = db.Column(db.Integer, db.ForeignKey('event_categories.id'), nullable=False)
+    event_host_id          = db.Column(db.Integer, db.ForeignKey('event_hosts.id'), nullable=False)
 
-    event_category = db.relationship('EventCategory', lazy='selectin')
-    event_host = db.relationship('EventHost', lazy='selectin')
-    attendances = db.relationship('Attendance', back_populates='location', lazy=True, cascade='all, delete-orphan')
-    checkins = db.relationship('CheckIn', back_populates='location', lazy=True, cascade='all, delete-orphan')
-    matches_at_location = db.relationship('Match', back_populates='location', cascade='all, delete-orphan')  # ✅ added cascade
+    # Event config
+    start_time             = db.Column(db.DateTime, nullable=False)
+    description            = db.Column(db.String(500))
+    base_price             = db.Column(db.Numeric(10, 2))
+    currency               = db.Column(db.String(10), default='SEK')  # ✅ added back
+    max_attendees          = db.Column(db.Integer, nullable=False)
+    max_male_attendees     = db.Column(db.Integer, nullable=True)
+    max_female_attendees   = db.Column(db.Integer, nullable=True)
+    is_matchmaking_enabled = db.Column(db.Boolean, default=False)
+    created_at             = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at             = db.Column(db.DateTime, onupdate=lambda: datetime.now(timezone.utc))
+
+    # Operational state
+    is_checkin_closed = db.Column(db.Boolean, default=False)
+    current_round     = db.Column(db.Integer, default=1)
+
+    venue               = db.relationship('Venue', back_populates='events')
+    event_category      = db.relationship('EventCategory', lazy='selectin')
+    event_host          = db.relationship('EventHost', back_populates='events', lazy='selectin')  # ✅ fixed
+    attendances         = db.relationship('Attendance', back_populates='location', lazy=True, cascade='all, delete-orphan')
+    checkins            = db.relationship('CheckIn', back_populates='location', lazy=True, cascade='all, delete-orphan')
+    matches_at_location = db.relationship('Match', back_populates='location', cascade='all, delete-orphan')
 
     @validates('max_male_attendees', 'max_female_attendees')
     def validate_gender_limits(self, key, value):
@@ -220,14 +245,14 @@ class EventLocation(db.Model):
 class Attendance(db.Model):
     __tablename__ = 'user_attendance'
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user_credentials.id', ondelete='CASCADE'), nullable=False)
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user_credentials.id', ondelete='CASCADE'), nullable=False)
     location_id = db.Column(db.Integer, db.ForeignKey('event_locations.id', ondelete='CASCADE'), nullable=False)
-    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))  # ✅ lambda
-    hasAttended = db.Column(db.Boolean, default=False)
+    timestamp   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
-    user = db.relationship('User', back_populates='attendances')
+    user     = db.relationship('User', back_populates='attendances')
     location = db.relationship('EventLocation', back_populates='attendances')
+    ticket   = db.relationship('Ticket', back_populates='attendance', uselist=False)
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'location_id', name='unique_user_location_attendance'),
@@ -237,17 +262,72 @@ class Attendance(db.Model):
 class CheckIn(db.Model):
     __tablename__ = 'user_checkins'
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user_credentials.id', ondelete='CASCADE'), nullable=False)
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user_credentials.id', ondelete='CASCADE'), nullable=False)
     location_id = db.Column(db.Integer, db.ForeignKey('event_locations.id', ondelete='CASCADE'), nullable=False)
-    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))  # ✅ lambda
+    timestamp   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
-    user = db.relationship('User', back_populates='checkins')
+    user     = db.relationship('User', back_populates='checkins')
     location = db.relationship('EventLocation', back_populates='checkins')
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'location_id', name='unique_user_location_checkin'),
     )
+
+
+class Ticket(db.Model):
+    """User-facing proof of purchase. Created when registration is confirmed."""
+    __tablename__ = 'tickets'
+
+    id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    attendance_id = db.Column(db.Integer, db.ForeignKey('user_attendance.id', ondelete='CASCADE'), nullable=False, unique=True)
+
+    # Identity
+    qr_token    = db.Column(db.String(64), unique=True, nullable=False, default=lambda: secrets.token_urlsafe(32))
+    qr_base64   = db.Column(db.Text, nullable=True)  # ✅ cached, generated once
+    ticket_type = db.Column(db.String(30), default='standard')
+    issued_at   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Payment snapshot
+    amount_paid  = db.Column(db.Numeric(10, 2), nullable=True)
+    currency     = db.Column(db.String(10), default='SEK')
+    payment_ref  = db.Column(db.String(100), nullable=True)
+    paid_at      = db.Column(db.DateTime, nullable=True)
+
+    # Lifecycle
+    is_void             = db.Column(db.Boolean, default=False)
+    cancelled_at        = db.Column(db.DateTime, nullable=True)
+    cancellation_reason = db.Column(db.String(200), nullable=True)
+
+    attendance = db.relationship('Attendance', back_populates='ticket')
+
+    @property
+    def is_expired(self) -> bool:
+        event_time = self.attendance.location.start_time.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) > event_time
+
+    @property
+    def is_checked_in(self) -> bool:
+        return CheckIn.query.filter_by(
+            user_id=self.attendance.user_id,
+            location_id=self.attendance.location_id
+        ).first() is not None
+
+    @property
+    def status(self) -> str:
+        if self.is_void:       return "void"
+        if self.is_expired:    return "expired"
+        if self.is_checked_in: return "used"
+        return "active"
+
+    def get_or_generate_qr(self) -> str:  # ✅ replaces generate_qr_base64
+        if not self.qr_base64:
+            img = qrcode.make(self.qr_token)
+            buffer = io.BytesIO()
+            img.save(buffer, format="PNG")
+            self.qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+            db.session.commit()
+        return self.qr_base64
 
 
 class MatchDecision(db.Model):
