@@ -1575,112 +1575,103 @@ def postLocationInfo():
         if not user:
             return jsonify({'error': 'Unauthorized'}), 401
 
-        # ===== REQUEST DATA =====
         data = request.get_json()
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
         # ===== CATEGORY =====
-        category_name = data.get("event_category", "").strip()
-        if not category_name:
-            return jsonify({"error": "event_category is required"}), 400
+        # ✅ now accepts event_category_id instead of name string
+        category_id = data.get("event_category_id")
+        if category_id is None:
+            return jsonify({"error": "event_category_id is required"}), 400
 
-        try:
-            category = EventCategory.query.filter_by(name=category_name).first()
-            if not category:
-                category = EventCategory(name=category_name)
-                db.session.add(category)
-                db.session.flush()
-        except IntegrityError:
-            db.session.rollback()
-            category = EventCategory.query.filter_by(name=category_name).first()
-            if not category:
-                return jsonify({"error": "Category could not be created"}), 500
-        except SQLAlchemyError:
-            db.session.rollback()
-            return jsonify({"error": "Category processing failed"}), 500
+        category = db.session.get(EventCategory, category_id)
+        if not category:
+            return jsonify({"error": "Invalid event_category_id"}), 400
 
         # ===== HOST =====
         host_id = data.get("event_host_id")
         if host_id is None:
             return jsonify({"error": "event_host_id is required"}), 400
 
-        try:
-            host = db.session.get(EventHost, host_id)
-            if not host:
-                return jsonify({"error": "Invalid event_host_id"}), 400
-        except SQLAlchemyError:
-            return jsonify({"error": "Host processing failed"}), 500
+        host = db.session.get(EventHost, host_id)
+        if not host:
+            return jsonify({"error": "Invalid event_host_id"}), 400
+
+        # ✅ optional: verify the host belongs to the requesting user
+        if host.user_id is not None and host.user_id != user.id:
+            return jsonify({"error": "You do not own this event host"}), 403
+
+        # ===== VENUE =====
+        # ✅ replaces location/lat/lng — just a FK now
+        venue_id = data.get("venue_id")
+        if venue_id is None:
+            return jsonify({"error": "venue_id is required"}), 400
+
+        venue = db.session.get(Venue, venue_id)
+        if not venue:
+            return jsonify({"error": "Invalid venue_id"}), 400
 
         # ===== DATE & TIME =====
-        date_str = data.get('date')
-        time_str = data.get('time')
-        if not date_str or not time_str:
-            return jsonify({"error": "date and time are required"}), 400
+        # ✅ single ISO start_time instead of separate date + time fields
+        start_time_str = data.get('start_time')
+        if not start_time_str:
+            return jsonify({"error": "start_time is required"}), 400
 
         try:
-            time_str_normalized = time_str[:5]  # strip seconds if present
-            start_time = datetime.strptime(f"{date_str} {time_str_normalized}", "%Y-%m-%d %H:%M")
+            start_time = datetime.strptime(start_time_str[:16], "%Y-%m-%dT%H:%M")
         except ValueError as e:
-            return jsonify({"error": "Invalid date or time format", "details": str(e)}), 400
+            return jsonify({"error": "Invalid start_time format, expected ISO 8601 e.g. 2025-06-01T19:00", "details": str(e)}), 400
 
         # ===== ATTENDEE LOGIC =====
         try:
-            max_attendees = int(data.get('maxAttendees'))
+            max_attendees = int(data.get('max_attendees'))  # ✅ renamed from maxAttendees
         except (TypeError, ValueError):
-            return jsonify({"error": "maxAttendees must be a valid integer"}), 400
+            return jsonify({"error": "max_attendees must be a valid integer"}), 400
 
-        raw_male   = data.get('maxMaleAttendees')
-        raw_female = data.get('maxFemaleAttendees')
+        raw_male   = data.get('max_male_attendees')         # ✅ renamed
+        raw_female = data.get('max_female_attendees')       # ✅ renamed
 
         try:
             max_male   = int(raw_male)   if raw_male   is not None else None
             max_female = int(raw_female) if raw_female is not None else None
         except (TypeError, ValueError):
-            return jsonify({"error": "maxMaleAttendees and maxFemaleAttendees must be integers"}), 400
+            return jsonify({"error": "max_male_attendees and max_female_attendees must be integers"}), 400
 
         # If either is null, divide evenly — females get the extra spot on odd numbers
         if max_male is None and max_female is None:
-            half = max_attendees // 2
+            half       = max_attendees // 2
             max_male   = half
             max_female = max_attendees - half
         elif max_male is None:
-            max_male = max_attendees - max_female
+            max_male   = max_attendees - max_female
         elif max_female is None:
             max_female = max_attendees - max_male
 
-        # Validate combined cap does not exceed total
         if max_male + max_female > max_attendees:
             return jsonify({
-                "error": "maxMaleAttendees + maxFemaleAttendees cannot exceed maxAttendees",
-                "maxAttendees": max_attendees,
-                "maxMaleAttendees": max_male,
-                "maxFemaleAttendees": max_female,
+                "error": "max_male_attendees + max_female_attendees cannot exceed max_attendees",
+                "max_attendees":        max_attendees,
+                "max_male_attendees":   max_male,
+                "max_female_attendees": max_female,
             }), 400
 
         # ===== BUILD EVENT =====
         try:
-            total_price = data.get('totalPrice')
-            lat         = data.get('lat')
-            lng         = data.get('lng')
-
-            if any(v is None for v in [total_price, lat, lng, data.get('location')]):
-                return jsonify({"error": "location, lat, lng and totalPrice are required"}), 400
+            base_price = data.get('base_price')             # ✅ renamed from totalPrice
 
             new_event = EventLocation(
-                max_attendees        = max_attendees,
-                max_male_attendees   = max_male,
-                max_female_attendees = max_female,
-                start_time           = start_time,
-                location_name        = data.get('location'),
-                latitude             = float(lat),
-                longitude            = float(lng),
-                total_price          = float(total_price),
-                currency             = data.get('currency', 'SEK'),
-                description          = data.get('description', ''),
-                is_matchmaking_enabled = bool(data.get('matchmake', False)),
-                event_category_id    = category.id,
-                event_host_id        = host.id,
+                venue_id               = venue.id,          # ✅ FK to Venue
+                max_attendees          = max_attendees,
+                max_male_attendees     = max_male,
+                max_female_attendees   = max_female,
+                start_time             = start_time,
+                base_price             = float(base_price) if base_price is not None else None,
+                currency               = data.get('currency', 'SEK'),
+                description            = data.get('description', ''),
+                is_matchmaking_enabled = bool(data.get('is_matchmaking_enabled', False)),  # ✅ renamed
+                event_category_id      = category.id,
+                event_host_id          = host.id,
             )
 
             new_event.validate_attendee_totals()
@@ -1690,13 +1681,16 @@ def postLocationInfo():
         except (TypeError, ValueError) as e:
             db.session.rollback()
             return jsonify({"error": "Invalid input types", "details": str(e)}), 400
-        except SQLAlchemyError as e:
+        except SQLAlchemyError:
             db.session.rollback()
             return jsonify({"error": "Failed to save event"}), 500
 
-        return jsonify({'message': "Event created successfully", "id": new_event.id}), 201
+        return jsonify({
+            'message': "Event created successfully",
+            'id':      new_event.id
+        }), 201
 
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
     
