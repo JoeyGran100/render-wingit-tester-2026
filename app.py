@@ -1707,7 +1707,6 @@ def getLocationInfo():
     if not user:
         return jsonify({'error': 'Unauthorized'}), 401
 
-    # Single query: all locations + user attendance + gender counts via aggregates
     attendance_stats = (
         db.session.query(
             EventLocation.id.label('location_id'),
@@ -1729,54 +1728,57 @@ def getLocationInfo():
     results = (
         db.session.query(
             EventLocation,
-            Attendance.hasAttended,
             attendance_stats.c.total_attending,
             attendance_stats.c.male_attending,
             attendance_stats.c.female_attending,
-        )
-        .outerjoin(
-            Attendance,
-            and_(
-                Attendance.location_id == EventLocation.id,
-                Attendance.user_id == user.id
-            )
         )
         .outerjoin(attendance_stats, attendance_stats.c.location_id == EventLocation.id)
         .all()
     )
 
     data = []
-    for loc, attended, total, male, female in results:
-        total = total or 0
-        male  = male  or 0
+    for loc, total, male, female in results:
+        total  = total  or 0
+        male   = male   or 0
         female = female or 0
 
         data.append({
             'id': loc.id,
-            'max_attendees': loc.max_attendees,
-            'max_male_attendees': loc.max_male_attendees,
-            'max_female_attendees': loc.max_female_attendees,
-            'start_time': loc.start_time.strftime('%Y-%m-%dT%H:%M:%S'),  # guaranteed T separator
-            'total_attending': total,
-            'male_attending': male,
-            'female_attending': female,
-            'spots_remaining': loc.max_attendees - total,
-            'male_spots_remaining': (loc.max_male_attendees - male) if loc.max_male_attendees is not None else None,
+
+            # ✅ nested venue object
+            'venue': {
+                'id':        loc.venue.id,
+                'name':      loc.venue.name,
+                'address':   loc.venue.address,
+                'latitude':  loc.venue.latitude,
+                'longitude': loc.venue.longitude,
+            },
+
+            # Capacity
+            'max_attendees':          loc.max_attendees,
+            'max_male_attendees':     loc.max_male_attendees,
+            'max_female_attendees':   loc.max_female_attendees,
+            'total_attending':        total,
+            'male_attending':         male,
+            'female_attending':       female,
+            'spots_remaining':        loc.max_attendees - total,
+            'male_spots_remaining':   (loc.max_male_attendees - male)     if loc.max_male_attendees   is not None else None,
             'female_spots_remaining': (loc.max_female_attendees - female) if loc.max_female_attendees is not None else None,
-            'location_name': loc.location_name,
-            'latitude': loc.latitude,
-            'longitude': loc.longitude,
-            'total_price': float(loc.total_price) if loc.total_price else None,
-            'currency': loc.currency,
-            'description': loc.description,
+
+            # Event config
+            'start_time':             loc.start_time.strftime('%Y-%m-%dT%H:%M:%S'),
+            'base_price':             float(loc.base_price) if loc.base_price else None,  # ✅ renamed
+            'currency':               loc.currency,
+            'description':            loc.description,
             'is_matchmaking_enabled': loc.is_matchmaking_enabled,
-            'is_checkin_closed': loc.is_checkin_closed,
-            'current_round': loc.current_round,
-            'event_category': loc.event_category.name if loc.event_category else None,
+            'is_checkin_closed':      loc.is_checkin_closed,
+            'current_round':          loc.current_round,
+
+            # Relations
+            'event_category':    loc.event_category.name if loc.event_category else None,
             'event_category_id': loc.event_category_id,
-            'event_host': loc.event_host.name if loc.event_host else None,
-            'event_host_id': loc.event_host_id,
-            'hasAttended': bool(attended) if attended is not None else False,
+            'event_host':        loc.event_host.name if loc.event_host else None,
+            'event_host_id':     loc.event_host_id,
         })
 
     return jsonify(data), 200
@@ -1786,7 +1788,16 @@ def getLocationInfo():
 def get_all_event_hosts():
     try:
         hosts = EventHost.query.order_by(EventHost.id.asc()).all()
-        results = [{"id": host.id, "name": host.name} for host in hosts]
+
+        # ✅ include user_id so frontend knows which host belongs to current user
+        results = [
+            {
+                'id':      host.id,
+                'name':    host.name,
+                'user_id': host.user_id,
+            }
+            for host in hosts
+        ]
         return jsonify(results), 200
 
     except Exception as e:
@@ -1800,34 +1811,72 @@ def get_user_tickets():
     if not user:
         return jsonify({'message': 'Unauthorized'}), 401
 
-    user_id = user.id
-    attendances = Attendance.query.filter_by(user_id=user_id).all()
-    tickets = []
+    # ✅ single query — fetch attendances that have a ticket
+    attendances = (
+        Attendance.query
+        .filter_by(user_id=user.id)
+        .join(Ticket, Ticket.attendance_id == Attendance.id)
+        .options(
+            db.contains_eager(Attendance.ticket),
+            db.joinedload(Attendance.location)
+              .joinedload(EventLocation.venue),         # ✅ load venue in same query
+        )
+        .all()
+    )
+
+    active, expired = [], []
 
     for attendance in attendances:
-        location = db.session.get(EventLocation, attendance.location_id)
-        if not location:
-            continue
+        ticket   = attendance.ticket
+        location = attendance.location
+        venue    = location.venue
 
-        checked_in = has_user_checked_in(user_id, location.id)
+        entry = {
+            # Ticket fields
+            'ticket': {
+                'id':                  ticket.id,
+                'qr_base64':           ticket.get_or_generate_qr(),
+                'ticket_type':         ticket.ticket_type,
+                'issued_at':           ticket.issued_at.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                'amount_paid':         float(ticket.amount_paid) if ticket.amount_paid else None,
+                'currency':            ticket.currency,
+                'payment_ref':         ticket.payment_ref,
+                'status':              ticket.status,           # "active"|"used"|"expired"|"void"
+                'cancellation_reason': ticket.cancellation_reason,
+            },
 
-        tickets.append({
-            'location_id': location.id,
-            'event_category': location.event_category.name if location.event_category else None,
-            'event_category_id': location.event_category_id,
-            'event_host': location.event_host.name if location.event_host else None,
-            'event_host_id': location.event_host_id,
-            'description': location.description,
-            'is_matchmaking_enabled': location.is_matchmaking_enabled,
-            'start_time': location.start_time.strftime('%Y-%m-%dT%H:%M:%SZ'),  # adds Z
-            'location_name': location.location_name,
-            'checked_in': checked_in,
-            'male_attendees': location._count_by_gender(GenderEnum.male),
-            'female_attendees': location._count_by_gender(GenderEnum.female),
-            'max_attendees': location.max_attendees
-        })
+            # Location fields
+            'location': {
+                'id':          location.id,
+                'start_time':  location.start_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                'description': location.description,
+                'base_price':  float(location.base_price) if location.base_price else None,  # ✅ renamed
+                'currency':    location.currency,
+                'is_matchmaking_enabled': location.is_matchmaking_enabled,
+                'is_checkin_closed':      location.is_checkin_closed,
+                'current_round':          location.current_round,
+                'max_attendees':          location.max_attendees,
+                'max_male_attendees':     location.max_male_attendees,
+                'max_female_attendees':   location.max_female_attendees,
+                'event_category':    location.event_category.name if location.event_category else None,
+                'event_category_id': location.event_category_id,
+                'event_host':        location.event_host.name if location.event_host else None,
+                'event_host_id':     location.event_host_id,
 
-    return jsonify({'tickets': tickets}), 200
+                # ✅ nested venue instead of flat location_name/lat/lng
+                'venue': {
+                    'id':        venue.id,
+                    'name':      venue.name,
+                    'address':   venue.address,
+                    'latitude':  venue.latitude,
+                    'longitude': venue.longitude,
+                },
+            },
+        }
+
+        (expired if ticket.is_expired else active).append(entry)
+
+    return jsonify({'active_tickets': active, 'expired_tickets': expired}), 200
 
 
 @app.route('/attend', methods=['POST'])
