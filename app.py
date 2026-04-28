@@ -17,7 +17,7 @@ from sqlalchemy import func, case, or_, and_, desc
 from flask_migrate import Migrate
 from collections import deque
 import enum
-from sqlalchemy.orm import validates, aliased
+from sqlalchemy.orm import validates
 from PIL import Image                    # ✅ NEW: For image resizing
 from functools import lru_cache
 from io import BytesIO                    # ✅ NEW: For in-memory file handling
@@ -32,7 +32,6 @@ import qrcode        # pip install qrcode[pil]
 import io            # built-in
 import base64        # built-in
 import secrets       # built-in (used for qr_token generation)
-
 
 app = Flask(__name__)
 app.config[
@@ -1882,51 +1881,37 @@ def get_event_categories():
     return jsonify([{'id': c.id, 'name': c.name} for c in categories]), 200
 
 
-@app.route('/eventLocationInfo', methods=['GET'])
-def getLocationInfo():
+@app.route('/my_tickets', methods=['GET'])
+def get_user_tickets():
     user = get_current_user_from_token()
     if not user:
-        return jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({'message': 'Unauthorized'}), 401
 
-    attendance_stats = (
+    # 1. Fetch stats as a plain dict keyed by location_id
+    stats_rows = (
         db.session.query(
             EventLocation.id.label('location_id'),
             func.count(Attendance.id).label('total_attending'),
-            func.sum(
-                case((UserProfile.gender == GenderEnum.male, 1), else_=0)
-            ).label('male_attending'),
-            func.sum(
-                case((UserProfile.gender == GenderEnum.female, 1), else_=0)
-            ).label('female_attending'),
+            func.sum(case((UserProfile.gender == GenderEnum.male, 1), else_=0)).label('male_attending'),
+            func.sum(case((UserProfile.gender == GenderEnum.female, 1), else_=0)).label('female_attending'),
         )
         .outerjoin(Attendance, Attendance.location_id == EventLocation.id)
         .outerjoin(User, User.id == Attendance.user_id)
         .outerjoin(UserProfile, UserProfile.user_auth_id == User.id)
         .group_by(EventLocation.id)
-        .subquery()
-    )
-
-    user_attendance = (
-        db.session.query(Attendance.location_id)
-        .filter(Attendance.user_id == user.id)
-        .subquery()
-    )
-
-    results = (
-        db.session.query(
-            EventLocation,
-            attendance_stats.c.total_attending,
-            attendance_stats.c.male_attending,
-            attendance_stats.c.female_attending,
-            user_attendance.c.location_id.isnot(None).label('is_attending'),
-        )
-        .outerjoin(attendance_stats, attendance_stats.c.location_id == EventLocation.id)
-        .outerjoin(user_attendance, user_attendance.c.location_id == EventLocation.id)
         .all()
     )
 
-    # --- Fetch first 3 attendee images per location in one query ---
-    # Rank attendances per location by sign-up time, then grab the first image per user
+    stats_by_location = {
+        row.location_id: {
+            'total':  row.total_attending  or 0,
+            'male':   row.male_attending   or 0,
+            'female': row.female_attending or 0,
+        }
+        for row in stats_rows
+    }
+
+    # 2. Fetch first 3 attendee preview images per location (one query, no N+1)
     ranked = (
         db.session.query(
             Attendance.location_id,
@@ -1937,7 +1922,6 @@ def getLocationInfo():
             ).label('rn')
         )
         .join(UserImages, UserImages.user_id == Attendance.user_id)
-        # One image per attendee: pick their earliest uploaded image
         .filter(
             UserImages.id == (
                 db.session.query(func.min(UserImages.id))
@@ -1955,58 +1939,84 @@ def getLocationInfo():
         .all()
     )
 
-    # Group into a dict: { location_id: [url1, url2, url3] }
     preview_images: dict[int, list[str]] = {}
     for location_id, image_url in top3_rows:
         preview_images.setdefault(location_id, []).append(image_url)
-    # -----------------------------------------------------------------
 
-    data = []
-    for loc, total, male, female, is_attending in results:
-        total  = total  or 0
-        male   = male   or 0
-        female = female or 0
+    # 3. Clean ORM query — no extra columns, eager loading works reliably
+    attendances = (
+        Attendance.query
+        .filter_by(user_id=user.id)
+        .join(Ticket, Ticket.attendance_id == Attendance.id)
+        .options(
+            db.contains_eager(Attendance.ticket),
+            db.joinedload(Attendance.location)
+              .joinedload(EventLocation.venue),
+        )
+        .all()
+    )
 
-        data.append({
-            'id': loc.id,
+    active, expired = [], []
 
-            'venue': {
-                'id':        loc.venue.id,
-                'name':      loc.venue.name,
-                'address':   loc.venue.address,
-                'latitude':  loc.venue.latitude,
-                'longitude': loc.venue.longitude,
+    for attendance in attendances:
+        ticket   = attendance.ticket
+        location = attendance.location
+        venue    = location.venue
+        s        = stats_by_location.get(location.id, {'total': 0, 'male': 0, 'female': 0})
+
+        entry = {
+            'ticket': {
+                'id':                  ticket.id,
+                'qr_base64':           ticket.get_or_generate_qr(),
+                'ticket_type':         ticket.ticket_type,
+                'issued_at':           ticket.issued_at.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                'amount_paid':         float(ticket.amount_paid) if ticket.amount_paid else None,
+                'currency':            ticket.currency,
+                'payment_ref':         ticket.payment_ref,
+                'status':              ticket.status,
+                'cancellation_reason': ticket.cancellation_reason,
             },
+            'location': {
+                'id':          location.id,
+                'start_time':  location.start_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                'description': location.description,
+                'base_price':  float(location.base_price) if location.base_price else None,
+                'currency':    location.currency,
+                'is_matchmaking_enabled': location.is_matchmaking_enabled,
+                'is_checkin_closed':      location.is_checkin_closed,
+                'current_round':          location.current_round,
 
-            'max_attendees':          loc.max_attendees,
-            'max_male_attendees':     loc.max_male_attendees,
-            'max_female_attendees':   loc.max_female_attendees,
-            'total_attending':        total,
-            'male_attending':         male,
-            'female_attending':       female,
-            'spots_remaining':        loc.max_attendees - total,
-            'male_spots_remaining':   (loc.max_male_attendees - male)     if loc.max_male_attendees   is not None else None,
-            'female_spots_remaining': (loc.max_female_attendees - female) if loc.max_female_attendees is not None else None,
+                'max_attendees':          location.max_attendees,
+                'max_male_attendees':     location.max_male_attendees,
+                'max_female_attendees':   location.max_female_attendees,
+                'total_attending':        s['total'],
+                'male_attending':         s['male'],
+                'female_attending':       s['female'],
+                'spots_remaining':        location.max_attendees - s['total'],
+                'male_spots_remaining':   (location.max_male_attendees - s['male'])     if location.max_male_attendees   is not None else None,
+                'female_spots_remaining': (location.max_female_attendees - s['female']) if location.max_female_attendees is not None else None,
 
-            'start_time':             loc.start_time.strftime('%Y-%m-%dT%H:%M:%S'),
-            'base_price':             float(loc.base_price) if loc.base_price else None,
-            'currency':               loc.currency,
-            'description':            loc.description,
-            'is_matchmaking_enabled': loc.is_matchmaking_enabled,
-            'is_checkin_closed':      loc.is_checkin_closed,
-            'current_round':          loc.current_round,
+                'event_category':    location.event_category.name if location.event_category else None,
+                'event_category_id': location.event_category_id,
+                'event_host':        location.event_host.name if location.event_host else None,
+                'event_host_id':     location.event_host_id,
 
-            'event_category':    loc.event_category.name if loc.event_category else None,
-            'event_category_id': loc.event_category_id,
-            'event_host':        loc.event_host.name if loc.event_host else None,
-            'event_host_id':     loc.event_host_id,
-            'is_attending':      bool(is_attending),
+                # ✅ New
+                'attendee_preview_images': preview_images.get(location.id, []),
 
-            # ✅ New field — up to 3 profile image URLs of first sign-ups
-            'attendee_preview_images': preview_images.get(loc.id, []),
-        })
+                'venue': {
+                    'id':        venue.id,
+                    'name':      venue.name,
+                    'address':   venue.address,
+                    'latitude':  venue.latitude,
+                    'longitude': venue.longitude,
+                },
+            },
+        }
 
-    return jsonify(data), 200
+        (expired if ticket.is_expired else active).append(entry)
+
+    return jsonify({'active_tickets': active, 'expired_tickets': expired}), 200
 
 
 @app.route('/attend', methods=['POST'])
